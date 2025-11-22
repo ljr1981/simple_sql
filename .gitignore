@@ -1,0 +1,28 @@
+# Open in notepad
+notepad .gitignore
+```
+
+**Paste this into the file:**
+```
+# Eiffel compiled/generated files
+EIFGENs/
+*.melted
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Backup files
+*.swp
+*.bak
+*~
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
