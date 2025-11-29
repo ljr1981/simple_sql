@@ -28,7 +28,7 @@ feature -- Operations
 			l_schema := a_memory_db.query ("SELECT sql FROM sqlite_master WHERE type='table' AND sql NOT NULL")
 			across l_schema.rows as ic loop
 				if attached ic.string_value ("sql") as al_sql then
-					l_file_db.execute (al_sql)
+					l_file_db.execute (al_sql.to_string_8)
 				end
 			end
 			
@@ -59,7 +59,7 @@ feature -- Operations
 			l_schema := l_file_db.query ("SELECT sql FROM sqlite_master WHERE type='table' AND sql NOT NULL")
 			across l_schema.rows as ic loop
 				if attached ic.string_value ("sql") as al_sql then
-					a_memory_db.execute (al_sql)
+					a_memory_db.execute (al_sql.to_string_8)
 				end
 			end
 			

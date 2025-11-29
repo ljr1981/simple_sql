@@ -6,7 +6,7 @@ A production-quality, easy-to-use wrapper around the Eiffel SQLite3 library, pro
 
 ## Features
 
-### ✅ Implemented (v0.1)
+### ✅ Implemented (v0.2)
 
 **Core Database Operations:**
 - Simple database creation (file-based and in-memory)
@@ -21,6 +21,38 @@ A production-quality, easy-to-use wrapper around the Eiffel SQLite3 library, pro
 - NULL value handling
 - Column access by name or index
 - Result iteration with automatic resource cleanup
+
+**Enhanced Error Handling (NEW):**
+- Structured error objects with context (`SIMPLE_SQL_ERROR`)
+- Enumerated SQLite error codes (`SIMPLE_SQL_ERROR_CODE`)
+- Both primary and extended error codes
+- Human-readable error names
+- Error category queries (is_constraint_violation, is_busy, is_readonly, etc.)
+- Specific constraint type detection (unique, primary key, foreign key, check, not null)
+
+**Prepared Statements (NEW):**
+- Parameterized queries preventing SQL injection
+- Parameter binding by index: `bind_integer(1, value)`
+- Parameter binding by name: `bind_text_by_name(":name", value)`
+- Support for INTEGER, REAL, TEXT, BLOB, and NULL types
+- Statement reset for efficient reuse
+- Automatic type conversion and escaping
+
+**PRAGMA Configuration (NEW):**
+- Named configuration presets: `make_wal`, `make_performance`, `make_safe`
+- WAL mode for improved concurrency
+- Synchronous mode control
+- Cache size configuration
+- Busy timeout settings
+- Foreign key enforcement
+- Memory-mapped I/O configuration
+
+**Batch Operations (NEW):**
+- Automatic transaction wrapping for bulk operations
+- `insert_many()` for bulk inserts
+- `execute_many()` for multiple SQL statements
+- Individual `insert()`, `update()`, `delete()` with auto-commit control
+- Manual transaction control with `begin()`, `commit()`, `rollback()`
 
 **Advanced Features:**
 - Memory ↔ File backup utilities
@@ -63,6 +95,92 @@ db.commit
 db.close
 ```
 
+## Prepared Statements
+
+```eiffel
+-- Create prepared statement (prevents SQL injection)
+stmt := db.prepare ("INSERT INTO users (name, age) VALUES (?, ?)")
+
+-- Bind by index (1-based)
+stmt.bind_text (1, "Alice")
+stmt.bind_integer (2, 30)
+stmt.execute
+
+-- Reuse with new values
+stmt.reset
+stmt.bind_text (1, "Bob")
+stmt.bind_integer (2, 25)
+stmt.execute
+
+-- Named parameters
+stmt := db.prepare ("SELECT * FROM users WHERE name = :name")
+stmt.bind_text_by_name (":name", "Alice")
+result := stmt.execute_returning_result
+```
+
+## Error Handling
+
+```eiffel
+db.execute ("INSERT INTO users (id, name) VALUES (1, 'Alice')")
+db.execute ("INSERT INTO users (id, name) VALUES (1, 'Bob')")  -- Duplicate!
+
+if db.has_error then
+    if db.is_constraint_error then
+        print ("Constraint violation: " + db.last_error_message)
+    end
+
+    -- Detailed error information
+    if attached db.last_structured_error as err then
+        print (err.full_description)
+        if err.is_unique_violation then
+            print ("Duplicate key detected")
+        end
+    end
+end
+```
+
+## PRAGMA Configuration
+
+```eiffel
+-- WAL mode for better concurrency
+create config.make_wal
+config.apply (db)
+
+-- Performance optimized (WAL + larger cache + memory-mapped I/O)
+create config.make_performance
+config.apply (db)
+
+-- Maximum safety (synchronous FULL + delete journal)
+create config.make_safe
+config.apply (db)
+
+-- Custom configuration
+create config.make_custom
+config.set_journal_mode (config.Journal_wal)
+config.set_cache_size (10000)
+config.set_foreign_keys (True)
+config.apply (db)
+```
+
+## Batch Operations
+
+```eiffel
+-- Bulk inserts with automatic transaction
+create batch.make (db)
+batch.insert_many ("users", <<"name", "age">>, <<
+    <<"Alice", "30">>,
+    <<"Bob", "25">>,
+    <<"Charlie", "35">>
+>>)
+
+-- Multiple operations in one transaction
+batch.begin
+batch.insert ("logs", <<"event", "timestamp">>, <<"login", "2025-01-15">>)
+batch.insert ("logs", <<"event", "timestamp">>, <<"action", "2025-01-15">>)
+batch.update ("users", "last_login = ?", <<"2025-01-15">>, "id = 1")
+batch.commit
+```
+
 ## JSON Integration
 
 ```eiffel
@@ -97,26 +215,64 @@ backup.copy_file_to_memory ("backup.db", mem_db)
 ## Current Architecture
 
 ```
-SIMPLE_SQL_DATABASE       -- Main database interface
-    ├── execute()          -- Command execution
-    ├── query()            -- Query with results
+SIMPLE_SQL_DATABASE           -- Main database interface
+    ├── execute()              -- Command execution
+    ├── query()                -- Query with results
+    ├── prepare()              -- Create prepared statement
     ├── begin_transaction()
     ├── commit()
-    └── rollback()
+    ├── rollback()
+    ├── has_error              -- Error status
+    ├── last_structured_error  -- Full error details
+    └── error_codes            -- Error code constants
 
-SIMPLE_SQL_RESULT         -- Query results
-    ├── rows               -- Iterable collection
-    ├── count              -- Row count
-    └── first/last         -- Direct access
+SIMPLE_SQL_RESULT             -- Query results
+    ├── rows                   -- Iterable collection
+    ├── count                  -- Row count
+    └── first/last             -- Direct access
 
-SIMPLE_SQL_ROW            -- Individual row
-    ├── string_value()     -- Type-safe access
+SIMPLE_SQL_ROW                -- Individual row
+    ├── string_value()         -- Type-safe access
     ├── integer_value()
     ├── real_value()
     ├── is_null()
-    └── item([index])      -- Generic access
+    └── item([index])          -- Generic access
 
-SIMPLE_SQL_BACKUP         -- Backup utilities
+SIMPLE_SQL_PREPARED_STATEMENT -- Parameterized queries (NEW)
+    ├── bind_integer()         -- Bind by index
+    ├── bind_text()
+    ├── bind_real()
+    ├── bind_null()
+    ├── bind_*_by_name()       -- Bind by name
+    ├── execute()
+    └── reset()                -- Reuse statement
+
+SIMPLE_SQL_BATCH              -- Bulk operations (NEW)
+    ├── insert_many()          -- Bulk insert
+    ├── execute_many()         -- Multiple statements
+    ├── begin() / commit()     -- Transaction control
+    └── rollback()
+
+SIMPLE_SQL_ERROR              -- Structured error (NEW)
+    ├── code / extended_code   -- Error codes
+    ├── message / sql          -- Context
+    ├── is_constraint_violation
+    ├── is_unique_violation
+    └── full_description()
+
+SIMPLE_SQL_ERROR_CODE         -- Error constants (NEW)
+    ├── ok, error, busy, locked
+    ├── constraint, readonly
+    ├── constraint_unique      -- Extended codes
+    └── name()                 -- Human-readable
+
+SIMPLE_SQL_PRAGMA_CONFIG      -- Configuration (NEW)
+    ├── make_wal               -- WAL mode preset
+    ├── make_performance       -- Performance preset
+    ├── make_safe              -- Safety preset
+    └── apply()                -- Apply to database
+
+SIMPLE_SQL_BACKUP             -- Backup utilities
     ├── copy_memory_to_file()
     └── copy_file_to_memory()
 ```
@@ -132,27 +288,29 @@ All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolate
 
 ## Roadmap to World-Class
 
-### Phase 1: Safety & Performance (High Priority)
+### ✅ Phase 1: Core Excellence (COMPLETE)
 
-**Prepared Statements & SQL Injection Prevention**
-- Parameterized queries: `query_with_params("SELECT * FROM users WHERE id = ?", [id])`
-- Automatic escaping for dynamic SQL
-- Type-safe parameter binding
+**Enhanced Error Handling** ✅
+- Structured error objects with full context
+- Enumerated SQLite error codes (primary + extended)
+- Constraint violation detection and categorization
 
-**Connection Pooling**
-- Multi-threaded database access
-- Connection lifecycle management
-- Pool size configuration
-- Connection health monitoring
+**Prepared Statements** ✅
+- SQL injection prevention via parameterized queries
+- Binding by index and by name
+- Statement reuse with reset
 
-**Performance Optimization**
-- Query result streaming for large datasets
-- Lazy loading of result rows
-- Cursor-based iteration
-- Batch insert optimization
-- Index suggestion analysis
+**PRAGMA Configuration** ✅
+- WAL mode and journal mode control
+- Synchronous mode, cache size, busy timeout
+- Named presets for common configurations
 
-### Phase 2: Developer Experience (Medium Priority)
+**Batch Operations** ✅
+- Bulk inserts with automatic transactions
+- Multiple statement execution
+- Transaction control
+
+### Phase 2: Developer Experience (Next)
 
 **Schema Migration Framework**
 - Version-controlled schema changes
@@ -176,11 +334,10 @@ query_builder.select(["name", "age"])
 - Relationship handling (1:1, 1:N, N:M)
 - Lazy loading of related objects
 
-**Enhanced Error Handling**
-- Detailed error context (line numbers, query text)
-- Error recovery strategies
-- Constraint violation details
-- Deadlock detection and retry
+**Connection Pooling**
+- Multi-threaded database access
+- Connection lifecycle management
+- Pool size configuration
 
 ### Phase 3: Advanced Features (Specialized)
 
@@ -281,9 +438,9 @@ Contributions welcome! Please ensure:
 
 ## Status
 
-**Current Version:** 0.1-alpha  
-**Stability:** Experimental - API may change  
-**Production Ready:** Core features stable, advanced features in development
+**Current Version:** 0.2
+**Stability:** Beta - Core API stable
+**Production Ready:** Core features production-ready, advanced features in development
 
 ---
 

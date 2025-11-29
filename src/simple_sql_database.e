@@ -2,6 +2,13 @@ note
 	description: "[
 		High-level SQLite database API for simple, safe database operations.
 		Simplifies the sqlite3 library for common use cases with automatic resource management.
+
+		Error Handling:
+			- `has_error`: Check if last operation failed
+			- `last_structured_error`: Full error with code, message, SQL context
+			- `last_error_code`: Quick access to error code constant
+			- `last_error_message`: Quick access to error message string
+			- `error_codes`: Access to SIMPLE_SQL_ERROR_CODE for comparisons
 	]"
 	date: "$Date$"
 	revision: "$Revision$"
@@ -60,8 +67,33 @@ feature -- Access
 	file_name: STRING_32
 			-- Database file name or ":memory:"
 
-	last_error: detachable STRING_32
+	last_structured_error: detachable SIMPLE_SQL_ERROR
+			-- Structured error from last failed operation
+
+	last_error_message: detachable STRING_32
 			-- Error message from last failed operation
+		do
+			if attached last_structured_error as l_err then
+				Result := l_err.message
+			end
+		end
+
+	last_error_code: INTEGER
+			-- Error code from last operation (0 = success)
+		do
+			if attached last_structured_error as l_err then
+				Result := l_err.code
+			end
+		ensure
+			zero_when_no_error: not has_error implies Result = 0
+		end
+
+	error_codes: SIMPLE_SQL_ERROR_CODE
+			-- Access to error code constants for comparisons
+			-- Usage: if db.last_error_code = db.error_codes.constraint then ...
+		once
+			create Result
+		end
 
 	changes_count: INTEGER
 			-- Number of rows modified by last operation
@@ -90,9 +122,29 @@ feature -- Status report
 	has_error: BOOLEAN
 			-- Did last operation fail?
 		do
-			Result := last_error /= Void
+			Result := last_structured_error /= Void
 		ensure
-			error_attached: Result implies last_error /= Void
+			error_attached: Result implies last_structured_error /= Void
+		end
+
+feature -- Error status queries
+
+	is_constraint_error: BOOLEAN
+			-- Was last error a constraint violation?
+		do
+			Result := attached last_structured_error as l_err and then l_err.is_constraint_violation
+		end
+
+	is_busy_error: BOOLEAN
+			-- Was last error due to database being busy/locked?
+		do
+			Result := attached last_structured_error as l_err and then l_err.is_busy
+		end
+
+	is_readonly_error: BOOLEAN
+			-- Was last error due to readonly database?
+		do
+			Result := attached last_structured_error as l_err and then l_err.is_readonly
 		end
 
 feature -- Basic operations
@@ -106,26 +158,16 @@ feature -- Basic operations
 			l_statement: SQLITE_MODIFY_STATEMENT
 			l_sql: STRING_8
 		do
-			last_error := Void
+			clear_error
 			create l_sql.make_from_string (a_sql)
 			if not l_sql.ends_with (";") then
 				l_sql.append_character (';')
 			end
 			create l_statement.make (l_sql, internal_db)
 			l_statement.execute
-			if internal_db.has_error then
-				if attached internal_db.last_exception as al_exception then
-					if attached al_exception.description as al_desc then
-						last_error := al_desc.to_string_32
-					end
-				end
-			end
+			check_and_set_error (a_sql)
 		rescue
-			if attached internal_db.last_exception as al_exception then
-				if attached al_exception.description as al_desc then
-					last_error := al_desc.to_string_32
-				end
-			end
+			set_error_from_exception (a_sql)
 		end
 
 	query (a_sql: READABLE_STRING_8): SIMPLE_SQL_RESULT
@@ -136,25 +178,15 @@ feature -- Basic operations
 		local
 			l_sql: STRING_8
 		do
-			last_error := Void
+			clear_error
 			create l_sql.make_from_string (a_sql)
 			if not l_sql.ends_with (";") then
 				l_sql.append_character (';')
 			end
 			create Result.make (l_sql, internal_db)
-			if internal_db.has_error then
-				if attached internal_db.last_exception as al_exception then
-					if attached al_exception.description as al_desc then
-						last_error := al_desc.to_string_32
-					end
-				end
-			end
+			check_and_set_error (a_sql)
 		rescue
-			if attached internal_db.last_exception as al_exception then
-				if attached al_exception.description as al_desc then
-					last_error := al_desc.to_string_32
-				end
-			end
+			set_error_from_exception (a_sql)
 			create Result.make_empty
 		end
 
@@ -163,7 +195,7 @@ feature -- Basic operations
 		require
 			is_open: is_open
 		do
-			last_error := Void
+			clear_error
 			internal_db.begin_transaction (True)
 		end
 
@@ -171,9 +203,9 @@ feature -- Basic operations
 			-- Commit current transaction
 		require
 			is_open: is_open
-			is_in_transaction: internal_db.is_in_transaction
+			in_transaction: is_in_transaction
 		do
-			last_error := Void
+			clear_error
 			internal_db.commit
 		end
 
@@ -181,9 +213,9 @@ feature -- Basic operations
 			-- Rollback current transaction
 		require
 			is_open: is_open
-			is_in_transaction: internal_db.is_in_transaction
+			in_transaction: is_in_transaction
 		do
-			last_error := Void
+			clear_error
 			internal_db.rollback
 		end
 
@@ -197,10 +229,69 @@ feature -- Basic operations
 			is_closed: not is_open
 		end
 
-feature -- Implementation
+feature {NONE} -- Error handling implementation
+
+	clear_error
+			-- Clear any previous error
+		do
+			last_structured_error := Void
+		ensure
+			no_error: not has_error
+		end
+
+	check_and_set_error (a_sql: READABLE_STRING_GENERAL)
+			-- Check internal_db for error and set structured error if found
+		do
+			if internal_db.has_error then
+				set_error_from_exception (a_sql)
+			end
+		end
+
+	set_error_from_exception (a_sql: READABLE_STRING_GENERAL)
+			-- Set structured error from internal_db exception
+		local
+			l_code: INTEGER
+			l_message: STRING_32
+		do
+			if attached internal_db.last_exception as l_exception then
+				l_code := l_exception.result_code
+				if attached l_exception.description as l_desc then
+					l_message := l_desc.to_string_32
+				else
+					l_message := "Unknown error"
+				end
+				create last_structured_error.make_with_sql (l_code, l_message, a_sql)
+			else
+				-- Exception without details
+				create last_structured_error.make_with_sql (
+					error_codes.error,
+					"Unknown database error",
+					a_sql
+				)
+			end
+		ensure
+			has_error: has_error
+		end
+
+feature -- Prepared Statements
+
+	prepare (a_sql: READABLE_STRING_8): SIMPLE_SQL_PREPARED_STATEMENT
+			-- Create prepared statement for given SQL
+		require
+			is_open: is_open
+			sql_not_empty: not a_sql.is_empty
+		do
+			create Result.make (a_sql, internal_db)
+		ensure
+			result_attached: Result /= Void
+		end
+
+feature {SIMPLE_SQL_BACKUP, SIMPLE_SQL_RESULT, SIMPLE_SQL_PREPARED_STATEMENT} -- Implementation
 
 	internal_db: SQLITE_DATABASE
 			-- Underlying sqlite3 database connection
+
+feature {NONE} -- Implementation
 
 	dispose
 			-- <Precursor>

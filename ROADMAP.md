@@ -1,0 +1,139 @@
+# SIMPLE_SQL World-Class SQLite Library Roadmap
+
+---
+
+## Claude: Start Here
+
+**When starting a new conversation, read this file first.**
+
+After reading this file, Claude should:
+
+1. **Load additional context**:
+   - `D:/prod/reference_docs/eiffel/CLAUDE_CONTEXT.md` - Eiffel language corrections
+   - `D:/prod/reference_docs/eiffel/CURRENT_WORK.md` - Session state
+   - `D:/prod/reference_docs/eiffel/gotchas.md` - Known issues
+
+2. **Acknowledge**:
+   - Confirm understanding of project state
+   - Note which phase/feature we're working on
+   - Flag any relevant gotchas
+
+3. **Ask**: "What would you like to work on this session?"
+
+### End of Session
+
+Before ending, update:
+- [ ] `D:/prod/reference_docs/eiffel/CURRENT_WORK.md` - Where we left off
+- [ ] `D:/prod/reference_docs/eiffel/gotchas.md` - Any new discoveries
+- [ ] This roadmap if phases/features changed
+
+---
+
+## Current State
+
+The library has a solid foundation:
+- **SIMPLE_SQL_DATABASE**: Basic CRUD, transactions, error handling
+- **SIMPLE_SQL_RESULT/ROW**: Query results with typed accessors
+- **SIMPLE_SQL_BACKUP**: Memory/file database copying
+- **SIMPLE_SQL_JSON_HELPERS**: JSON storage utilities
+
+---
+
+## Proposed Architecture
+
+### Phase 1 - Core Excellence
+
+| Feature | Description |
+|---------|-------------|
+| **Prepared Statements** | Cached, parameterized queries with bind variables for security and performance |
+| **WAL Mode & PRAGMA Config** | Auto-configure optimal settings (WAL, synchronous=normal, mmap, busy_timeout) |
+| **Batch Operations** | Bulk insert/update/delete with automatic transaction wrapping |
+| **Enhanced Error Handling** | Error codes, structured error information |
+
+### Phase 2 - Developer Experience
+
+| Feature | Description |
+|---------|-------------|
+| **Fluent Query Builder** | Chainable SELECT/INSERT/UPDATE/DELETE construction |
+| **Schema Introspection** | Query table structure, columns, indexes, foreign keys |
+| **Migration System** | Version tracking via user_version PRAGMA, migration runner |
+
+### Phase 3 - Advanced Features
+
+| Feature | Description |
+|---------|-------------|
+| **FTS5 Full-Text Search** | Virtual table setup, MATCH queries, BM25 ranking |
+| **Audit/Change Tracking** | Auto-generate triggers, change log table, JSON diff logging |
+| **Repository Pattern** | Generic repository with find_all, find_by_id, find_where |
+
+### Phase 4 - Specialized
+
+| Feature | Description |
+|---------|-------------|
+| **Vector Embeddings** | Store REAL_64 arrays, cosine similarity, K-nearest neighbors |
+| **Connection Pooling** | Thread-safe connection management |
+| **Advanced Backup** | Online backup API, incremental backup, export/import formats |
+
+---
+
+## Proposed Class Structure
+
+```
+SIMPLE_SQL_DATABASE (enhanced)
++-- SIMPLE_SQL_PREPARED_STATEMENT
++-- SIMPLE_SQL_PRAGMA_CONFIG
+
+SIMPLE_SQL_QUERY_BUILDER
++-- SIMPLE_SQL_SELECT_BUILDER
++-- SIMPLE_SQL_INSERT_BUILDER
++-- SIMPLE_SQL_UPDATE_BUILDER
++-- SIMPLE_SQL_DELETE_BUILDER
+
+SIMPLE_SQL_SCHEMA
++-- SIMPLE_SQL_MIGRATION
++-- SIMPLE_SQL_MIGRATION_RUNNER
++-- SIMPLE_SQL_TABLE_INFO
++-- SIMPLE_SQL_COLUMN_INFO
+
+SIMPLE_SQL_FTS5
++-- SIMPLE_SQL_FTS5_TABLE
++-- SIMPLE_SQL_FTS5_QUERY
+
+SIMPLE_SQL_VECTOR
++-- SIMPLE_SQL_VECTOR_STORE
++-- SIMPLE_SQL_SIMILARITY
+
+SIMPLE_SQL_AUDIT
++-- SIMPLE_SQL_AUDIT_TRIGGER_GENERATOR
++-- SIMPLE_SQL_CHANGE_LOG
+
+SIMPLE_SQL_RESULT (enhanced)
++-- SIMPLE_SQL_ROW (enhanced)
++-- SIMPLE_SQL_CURSOR (lazy iteration)
+
+SIMPLE_SQL_BACKUP (enhanced)
++-- SIMPLE_SQL_EXPORT
++-- SIMPLE_SQL_IMPORT
+```
+
+---
+
+## Research Sources
+
+- [Rusqlite - Ergonomic SQLite for Rust](https://github.com/rusqlite/rusqlite)
+- [Kysely - Type-safe SQL Query Builder](https://kysely.dev/)
+- [SQLite Performance Tuning](https://phiresky.github.io/blog/2020/sqlite-performance-tuning/)
+- [SQLite FTS5 Extension](https://www.sqlite.org/fts5.html)
+- [sqlite-migrate](https://github.com/simonw/sqlite-migrate)
+- [SQLite Hybrid Search](https://alexgarcia.xyz/blog/2024/sqlite-vec-hybrid-search/index.html)
+- [JSON Audit Log](https://til.simonwillison.net/sqlite/json-audit-log)
+- [SQLAlchemy Connection Pooling](https://docs.sqlalchemy.org/en/20/core/pooling.html)
+- [Declarative Schema Migration](https://david.rothlis.net/declarative-schema-migration-for-sqlite/)
+
+---
+
+## Notes
+
+- All development follows Eiffel Design by Contract principles
+- Classes use ECMA-367 standard Eiffel
+- Testing via EiffelStudio AutoTest framework
