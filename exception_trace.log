@@ -6,3 +6,39 @@ Following is the set of recorded exceptions:
 
 ******************************** Thread exception *****************************
 In thread           Root thread            0x0 (thread id)
+
+simple_sql: PANIC: Unexpected harmful signal (Segmentation violation) ...
+
+simple_sql: system execution failed.
+Following is the set of recorded exceptions.
+NB: The raised panic may have induced completely inconsistent information:
+
+******************************** Thread exception *****************************
+In thread           Root thread            0x0 (thread id)
+*******************************************************************************
+-------------------------------------------------------------------------------
+Class / Object      Routine                Nature of exception           Effect
+-------------------------------------------------------------------------------
+Invalid_object      root's creation        Unexpected harmful signal (Segmentation violation):
+<00000151A7188098>  (From EQA_EVALUATOR)   Eiffel run-time panic.        Panic
+-------------------------------------------------------------------------------
+
+simple_sql: dumping core to generate debugging information...
+
+simple_sql: PANIC: Unexpected harmful signal (Segmentation violation) ...
+
+simple_sql: system execution failed.
+Following is the set of recorded exceptions.
+NB: The raised panic may have induced completely inconsistent information:
+
+******************************** Thread exception *****************************
+In thread           Root thread            0x0 (thread id)
+*******************************************************************************
+-------------------------------------------------------------------------------
+Class / Object      Routine                Nature of exception           Effect
+-------------------------------------------------------------------------------
+Invalid_object      root's creation        Unexpected harmful signal (Segmentation violation):
+<0000022F679DA098>  (From EQA_EVALUATOR)   Eiffel run-time panic.        Panic
+-------------------------------------------------------------------------------
+
+simple_sql: dumping core to generate debugging information...

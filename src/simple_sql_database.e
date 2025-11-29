@@ -332,6 +332,49 @@ feature -- Query Builders
 			database_set: Result.database = Current
 		end
 
+feature -- Streaming and Cursor Queries
+
+	query_cursor (a_sql: READABLE_STRING_8): SIMPLE_SQL_CURSOR
+			-- Execute query returning lazy cursor for row-by-row iteration
+			-- Use for large result sets to avoid loading all rows into memory
+		require
+			is_open: is_open
+			sql_not_empty: not a_sql.is_empty
+		do
+			clear_error
+			create Result.make (a_sql, internal_db)
+		ensure
+			result_attached: Result /= Void
+		end
+
+	query_stream (a_sql: READABLE_STRING_8; a_action: FUNCTION [SIMPLE_SQL_ROW, BOOLEAN])
+			-- Execute query and process each row via callback action
+			-- Action returns True to stop early, False to continue
+		require
+			is_open: is_open
+			sql_not_empty: not a_sql.is_empty
+			action_attached: a_action /= Void
+		local
+			l_stream: SIMPLE_SQL_RESULT_STREAM
+		do
+			clear_error
+			create l_stream.make (a_sql, internal_db)
+			l_stream.for_each (a_action)
+		end
+
+	create_stream (a_sql: READABLE_STRING_8): SIMPLE_SQL_RESULT_STREAM
+			-- Create stream object for advanced streaming operations
+			-- (for_each, aggregate, collect_first, etc.)
+		require
+			is_open: is_open
+			sql_not_empty: not a_sql.is_empty
+		do
+			clear_error
+			create Result.make (a_sql, internal_db)
+		ensure
+			result_attached: Result /= Void
+		end
+
 feature -- Schema Introspection
 
 	schema: SIMPLE_SQL_SCHEMA

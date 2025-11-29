@@ -158,7 +158,7 @@ feature -- Conversion
 			Result := column_value (a_name) = Void
 		end
 
-feature {SIMPLE_SQL_RESULT} -- Element change
+feature {SIMPLE_SQL_RESULT, SIMPLE_SQL_CURSOR, SIMPLE_SQL_RESULT_STREAM} -- Element change
 
 	add_column (a_name: STRING_8; a_value: detachable ANY)
 			-- Add column with value

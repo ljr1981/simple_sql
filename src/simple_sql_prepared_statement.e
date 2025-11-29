@@ -215,6 +215,36 @@ feature -- Execution
 			result_attached: Result /= Void
 		end
 
+	execute_cursor: SIMPLE_SQL_CURSOR
+			-- Execute query and return lazy cursor for row-by-row iteration
+		require
+			is_query: is_query
+		local
+			l_sql_with_bindings: STRING_8
+		do
+			last_error := Void
+			l_sql_with_bindings := sql_with_bound_values
+			create Result.make (l_sql_with_bindings, database)
+			has_executed := True
+		ensure
+			result_attached: Result /= Void
+		end
+
+	execute_stream: SIMPLE_SQL_RESULT_STREAM
+			-- Execute query and return stream for callback-based processing
+		require
+			is_query: is_query
+		local
+			l_sql_with_bindings: STRING_8
+		do
+			last_error := Void
+			l_sql_with_bindings := sql_with_bound_values
+			create Result.make (l_sql_with_bindings, database)
+			has_executed := True
+		ensure
+			result_attached: Result /= Void
+		end
+
 feature -- Reset
 
 	reset

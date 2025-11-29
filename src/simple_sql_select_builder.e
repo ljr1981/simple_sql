@@ -458,6 +458,43 @@ feature -- Execution
 			Result := count > 0
 		end
 
+feature -- Streaming Execution
+
+	execute_cursor: detachable SIMPLE_SQL_CURSOR
+			-- Execute query returning lazy cursor for row-by-row iteration
+			-- Use for large result sets to avoid loading all rows into memory
+		require
+			has_database: has_database
+			has_table: has_table
+		do
+			if attached database as l_db then
+				Result := l_db.query_cursor (to_sql)
+			end
+		end
+
+	execute_stream: detachable SIMPLE_SQL_RESULT_STREAM
+			-- Execute query returning stream for callback-based processing
+		require
+			has_database: has_database
+			has_table: has_table
+		do
+			if attached database as l_db then
+				Result := l_db.create_stream (to_sql)
+			end
+		end
+
+	for_each (a_action: PROCEDURE [SIMPLE_SQL_ROW])
+			-- Execute query and process each row with action
+		require
+			has_database: has_database
+			has_table: has_table
+			action_attached: a_action /= Void
+		do
+			if attached execute_stream as l_stream then
+				l_stream.for_each_do (a_action)
+			end
+		end
+
 feature -- Reset
 
 	reset

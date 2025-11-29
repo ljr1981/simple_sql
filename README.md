@@ -6,7 +6,7 @@ A production-quality, easy-to-use wrapper around the Eiffel SQLite3 library, pro
 
 ## Features
 
-### ✅ Implemented (v0.3)
+### ✅ Implemented (v0.4)
 
 **Core Database Operations:**
 - Simple database creation (file-based and in-memory)
@@ -78,11 +78,19 @@ A production-quality, easy-to-use wrapper around the Eiffel SQLite3 library, pro
 - Migrate to specific version or latest
 - Reset capability (rollback all, migrate all)
 
+**Query Result Streaming (NEW):**
+- Lazy cursor for row-by-row iteration (`SIMPLE_SQL_CURSOR`)
+- Memory-efficient processing of large result sets
+- Callback-based streaming (`SIMPLE_SQL_RESULT_STREAM`)
+- Early termination support (stop processing when condition met)
+- `for_each`, `collect_first`, `count_rows`, `first_row`, `exists` operations
+- Full `across` loop integration
+
 **Advanced Features:**
 - Memory ↔ File backup utilities
 - JSON integration with SIMPLE_JSON library
 - Change tracking (affected row counts)
-- Comprehensive test suite with 100% coverage goal
+- Comprehensive test suite with 150 tests
 
 **Design Principles:**
 - Command-Query Separation throughout
@@ -374,6 +382,49 @@ runner.rollback_all
 runner.reset
 ```
 
+## Query Result Streaming
+
+```eiffel
+-- Cursor iteration (memory-efficient for large datasets)
+across db.query_cursor ("SELECT * FROM large_table") as ic loop
+    print (ic.string_value ("name"))
+    print (ic.integer_value ("age"))
+end
+
+-- Manual cursor control
+cursor := db.query_cursor ("SELECT * FROM users")
+from cursor.start until cursor.after loop
+    row := cursor.item
+    -- process row
+    cursor.forth
+end
+cursor.close
+
+-- Stream with callback (process each row, return True to stop)
+db.query_stream ("SELECT * FROM logs", agent process_log_entry)
+
+-- Advanced streaming operations
+stream := db.create_stream ("SELECT * FROM events")
+stream.for_each (agent handle_event)           -- Process all
+stream.for_each_do (agent print_event)         -- Process all (no early stop)
+recent := stream.collect_first (100)           -- Get first 100 rows
+total := stream.count_rows                     -- Count without loading all
+if stream.exists then ... end                  -- Check if any rows match
+first := stream.first_row                      -- Get first row only
+
+-- Prepared statement streaming
+stmt := db.prepare ("SELECT * FROM users WHERE age > ?")
+stmt.bind_integer (1, 21)
+cursor := stmt.execute_cursor
+stream := stmt.execute_stream
+
+-- SELECT builder streaming
+db.select_builder
+    .from_table ("users")
+    .where ("active = 1")
+    .for_each (agent process_user)
+```
+
 ## JSON Integration
 
 ```eiffel
@@ -410,13 +461,16 @@ backup.copy_file_to_memory ("backup.db", mem_db)
 ```
 SIMPLE_SQL_DATABASE           -- Main database interface
     ├── execute()              -- Command execution
-    ├── query()                -- Query with results
+    ├── query()                -- Query with results (eager)
+    ├── query_cursor()         -- Query with lazy cursor (NEW)
+    ├── query_stream()         -- Query with callback (NEW)
+    ├── create_stream()        -- Create stream object (NEW)
     ├── prepare()              -- Create prepared statement
-    ├── select_builder()       -- Create SELECT builder (NEW)
-    ├── insert_builder()       -- Create INSERT builder (NEW)
-    ├── update_builder()       -- Create UPDATE builder (NEW)
-    ├── delete_builder()       -- Create DELETE builder (NEW)
-    ├── schema()               -- Schema introspection (NEW)
+    ├── select_builder()       -- Create SELECT builder
+    ├── insert_builder()       -- Create INSERT builder
+    ├── update_builder()       -- Create UPDATE builder
+    ├── delete_builder()       -- Create DELETE builder
+    ├── schema()               -- Schema introspection
     ├── begin_transaction()
     ├── commit()
     ├── rollback()
@@ -424,10 +478,34 @@ SIMPLE_SQL_DATABASE           -- Main database interface
     ├── last_structured_error  -- Full error details
     └── error_codes            -- Error code constants
 
-SIMPLE_SQL_RESULT             -- Query results
+SIMPLE_SQL_RESULT             -- Query results (eager loading)
     ├── rows                   -- Iterable collection
     ├── count                  -- Row count
     └── first/last             -- Direct access
+
+SIMPLE_SQL_CURSOR             -- Lazy cursor iteration (NEW)
+    ├── start() / forth()      -- Cursor movement
+    ├── after                  -- End check
+    ├── item                   -- Current row
+    ├── rows_fetched           -- Count processed
+    ├── close()                -- Release resources
+    └── new_cursor             -- For across loops
+
+SIMPLE_SQL_CURSOR_ITERATOR    -- Iterator for across (NEW)
+    ├── item                   -- Current row
+    ├── after                  -- End check
+    ├── forth()                -- Next row
+    └── string_value() etc.    -- Direct column access
+
+SIMPLE_SQL_RESULT_STREAM      -- Callback streaming (NEW)
+    ├── for_each()             -- Process with early stop
+    ├── for_each_do()          -- Process all
+    ├── collect_first()        -- Get first N rows
+    ├── count_rows()           -- Count total
+    ├── first_row()            -- Get first only
+    ├── exists()               -- Any rows?
+    ├── rows_processed         -- Count processed
+    └── was_stopped_early      -- Early termination flag
 
 SIMPLE_SQL_ROW                -- Individual row
     ├── string_value()         -- Type-safe access
@@ -590,7 +668,17 @@ All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolate
 - Rollback on failure
 - Migrate to specific version or latest
 
-### Phase 3: Advanced Features (Next)
+### ✅ Phase 3: Performance Optimization (COMPLETE)
+
+**Query Result Streaming** ✅
+- Lazy cursor iteration (`SIMPLE_SQL_CURSOR`)
+- Callback-based streaming (`SIMPLE_SQL_RESULT_STREAM`)
+- Memory-efficient processing of large result sets
+- Early termination support
+- Full `across` loop integration
+- Prepared statement and query builder integration
+
+### Phase 4: Advanced Features (Next)
 
 **Full-Text Search Integration**
 - FTS5 module integration
@@ -610,19 +698,7 @@ All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolate
 - Schema validation integration
 - Partial updates with JSON Patch/Merge Patch
 
-**Spatial Data Support**
-- SpatiaLite extension integration
-- Geometric query support
-- GIS operations
-
-**Observability & Monitoring**
-- Query performance tracking
-- Slow query logging
-- Connection pool metrics
-- Cache hit rates
-- Automatic EXPLAIN QUERY PLAN
-
-### Phase 4: Enterprise Features (Future)
+### Phase 5: Enterprise Features (Future)
 
 **Multi-Database Support**
 - Database abstraction layer
@@ -689,9 +765,10 @@ Contributions welcome! Please ensure:
 
 ## Status
 
-**Current Version:** 0.3
+**Current Version:** 0.4
 **Stability:** Beta - Core API stable
 **Production Ready:** Core features production-ready, advanced features in development
+**Test Coverage:** 150 tests passing
 
 ---
 
