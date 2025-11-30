@@ -387,6 +387,18 @@ feature -- Schema Introspection
 			result_attached: Result /= Void
 		end
 
+feature -- Full-Text Search
+
+	fts5: SIMPLE_SQL_FTS5
+			-- Create FTS5 full-text search manager for this database
+		require
+			is_open: is_open
+		do
+			create Result.make (Current)
+		ensure
+			result_attached: Result /= Void
+		end
+
 feature -- Additional Accessors
 
 	last_insert_rowid: INTEGER_64

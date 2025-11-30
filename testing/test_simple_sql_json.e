@@ -53,7 +53,7 @@ feature -- Test routines
 
 			-- Store
 			test_db.execute ("CREATE TABLE users (id INTEGER, data TEXT)")
-			test_db.execute ("INSERT INTO users VALUES (1, '" + l_obj.to_json_string + "')")
+			test_db.execute ("INSERT INTO users VALUES (1, '" + l_obj.to_json_string.to_string_8 + "')")
 
 			-- Retrieve and parse
 			l_result := test_db.query ("SELECT data FROM users WHERE id=1")
@@ -91,7 +91,7 @@ feature -- Test routines
 
 			-- Store
 			test_db.execute ("CREATE TABLE colors (data TEXT)")
-			test_db.execute ("INSERT INTO colors VALUES ('" + l_array.to_json_string + "')")
+			test_db.execute ("INSERT INTO colors VALUES ('" + l_array.to_json_string.to_string_8 + "')")
 
 			-- Retrieve and parse
 			l_result := test_db.query ("SELECT data FROM colors")
@@ -126,7 +126,7 @@ feature -- Test routines
 
 			-- Store
 			test_db.execute ("CREATE TABLE profiles (data TEXT)")
-			test_db.execute ("INSERT INTO profiles VALUES ('" + l_obj.to_json_string + "')")
+			test_db.execute ("INSERT INTO profiles VALUES ('" + l_obj.to_json_string.to_string_8 + "')")
 
 			-- Retrieve and parse
 			l_result := test_db.query ("SELECT data FROM profiles")
@@ -160,7 +160,7 @@ feature -- Test routines
 			l_obj.put_null ("optional").do_nothing
 
 			test_db.execute ("CREATE TABLE nulls (data TEXT)")
-			test_db.execute ("INSERT INTO nulls VALUES ('" + l_obj.to_json_string + "')")
+			test_db.execute ("INSERT INTO nulls VALUES ('" + l_obj.to_json_string.to_string_8 + "')")
 
 			l_result := test_db.query ("SELECT data FROM nulls")
 			l_value := l_json.parse (l_result.first.string_value ("data"))
@@ -190,8 +190,8 @@ feature -- Test routines
 			l_obj2.put_string ("B", "type").do_nothing
 
 			test_db.execute ("CREATE TABLE docs (data TEXT)")
-			test_db.execute ("INSERT INTO docs VALUES ('" + l_obj1.to_json_string + "')")
-			test_db.execute ("INSERT INTO docs VALUES ('" + l_obj2.to_json_string + "')")
+			test_db.execute ("INSERT INTO docs VALUES ('" + l_obj1.to_json_string.to_string_8 + "')")
+			test_db.execute ("INSERT INTO docs VALUES ('" + l_obj2.to_json_string.to_string_8 + "')")
 
 			l_result := test_db.query ("SELECT COUNT(*) as cnt FROM docs")
 			assert_equal ("two_docs", 2, l_result.first.integer_value ("cnt"))

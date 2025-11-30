@@ -125,7 +125,7 @@ feature -- Batch operations
 			is_active: is_active
 			sql_not_empty: not a_sql.is_empty
 		do
-			pending_statements.extend (a_sql.twin)
+			pending_statements.extend (a_sql.to_string_8)
 			operations_count := operations_count + 1
 		ensure
 			count_increased: operations_count = old operations_count + 1

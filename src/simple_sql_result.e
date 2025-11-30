@@ -110,7 +110,7 @@ feature {NONE} -- Implementation
 			until
 				i > a_row.count
 			loop
-				l_sql_row.add_column (a_row.column_name (i), a_row [i])
+				l_sql_row.add_column (a_row.column_name (i).to_string_8, a_row [i])
 				i := i + 1
 			end
 			rows.extend (l_sql_row)

@@ -13,7 +13,7 @@
 		<setting name="dead_code_removal" value="feature"/>
 		<library name="base" location="$ISE_LIBRARY\library\base\base.ecf"/>
 		<library name="simple_json" location="D:\prod\simple_json\simple_json.ecf"/>
-		<library name="sqlite" location="$ISE_LIBRARY\unstable\library\persistency\database\sqlite3\sqlite.ecf"/>
+		<library name="sqlite" location="D:\prod\eiffel_sqlite_2025\sqlite_2025.ecf"/>
 		<cluster name="src" location=".\src\" recursive="true"/>
 	</target>
 	<target name="simple_sql_tests" extends="simple_sql">
