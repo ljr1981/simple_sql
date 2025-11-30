@@ -31,7 +31,7 @@ Before ending, update:
 
 ## Current State
 
-**Phases 1-3 Complete.** The library now includes:
+**Phases 1-3 Complete. Phase 4 Partially Complete (FTS5).** The library now includes:
 - **SIMPLE_SQL_DATABASE**: Full CRUD, transactions, streaming, error handling
 - **SIMPLE_SQL_RESULT/ROW**: Query results with typed accessors
 - **SIMPLE_SQL_CURSOR**: Lazy row-by-row iteration (NEW in Phase 3)
@@ -44,6 +44,10 @@ Before ending, update:
 - **SIMPLE_SQL_BATCH**: Bulk operations
 - **SIMPLE_SQL_BACKUP**: Memory/file database copying
 - **SIMPLE_SQL_ERROR**: Structured error handling
+- **SIMPLE_SQL_FTS5**: Full-text search with BM25 ranking (NEW in Phase 4)
+- **SIMPLE_SQL_FTS5_QUERY**: Fluent FTS5 query builder (NEW in Phase 4)
+
+**All 181 tests passing. Production-ready for core features and FTS5.**
 
 ---
 
@@ -74,13 +78,13 @@ Before ending, update:
 | **Lazy Loading** | Row-by-row fetching for large result sets | ✅ |
 | **Cursor-Based Iteration** | Memory-efficient `across` loop support | ✅ |
 
-### Phase 4 - Advanced Features (Next)
+### Phase 4 - Advanced Features ✅ PARTIALLY COMPLETE
 
-| Feature | Description |
-|---------|-------------|
-| **FTS5 Full-Text Search** | Virtual table setup, MATCH queries, BM25 ranking |
-| **Audit/Change Tracking** | Auto-generate triggers, change log table, JSON diff logging |
-| **Repository Pattern** | Generic repository with find_all, find_by_id, find_where |
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **FTS5 Full-Text Search** | Virtual table setup, MATCH queries, BM25 ranking, Boolean queries, special character handling | ✅ |
+| **Audit/Change Tracking** | Auto-generate triggers, change log table, JSON diff logging | 📋 Next |
+| **Repository Pattern** | Generic repository with find_all, find_by_id, find_where | 📋 Future |
 
 ### Phase 5 - Specialized
 
@@ -110,9 +114,8 @@ SIMPLE_SQL_SCHEMA
 +-- SIMPLE_SQL_TABLE_INFO
 +-- SIMPLE_SQL_COLUMN_INFO
 
-SIMPLE_SQL_FTS5
-+-- SIMPLE_SQL_FTS5_TABLE
-+-- SIMPLE_SQL_FTS5_QUERY
+SIMPLE_SQL_FTS5 ✅ IMPLEMENTED
++-- SIMPLE_SQL_FTS5_QUERY ✅ IMPLEMENTED
 
 SIMPLE_SQL_VECTOR
 +-- SIMPLE_SQL_VECTOR_STORE

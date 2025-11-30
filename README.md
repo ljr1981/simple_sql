@@ -90,7 +90,8 @@ A production-quality, easy-to-use wrapper around the Eiffel SQLite3 library, pro
 - Memory ↔ File backup utilities
 - JSON integration with SIMPLE_JSON library
 - Change tracking (affected row counts)
-- Comprehensive test suite with 150 tests
+- **FTS5 Full-Text Search** with BM25 ranking, Boolean queries, and special character handling (NEW)
+- Comprehensive test suite with 181 tests
 
 **Design Principles:**
 - Command-Query Separation throughout
@@ -442,6 +443,42 @@ value := (create {SIMPLE_JSON}).parse (result.first.string_value ("data"))
 name := value.as_object.item ("name").as_string_32
 ```
 
+## FTS5 Full-Text Search
+
+```eiffel
+-- Check if FTS5 is available
+create fts5.make (db)
+if fts5.is_fts5_available then
+    -- Create FTS5 virtual table
+    fts5.create_table ("documents", <<"title", "content">>)
+
+    -- Insert searchable text
+    fts5.insert ("documents", <<"title", "content">>, <<
+        "SQLite Guide", "Learn how to use SQLite effectively"
+    >>)
+
+    -- Simple search
+    result := fts5.search ("documents", "SQLite")
+
+    -- Boolean search with query builder
+    result := fts5.query_builder ("documents")
+        .match_all (<<"SQLite", "Guide">>)      -- AND query
+        .with_rank                               -- Include BM25 score
+        .execute
+
+    -- Phrase search (handles special characters like apostrophes)
+    result := fts5.search ("documents", "O'Brien's guide")
+
+    -- Get search suggestions
+    result := fts5.query_builder ("documents")
+        .match_any (<<"database", "SQL", "query">>)  -- OR query
+        .not_matching ("tutorial")                    -- Exclude results
+        .order_by_rank                                -- Best matches first
+        .limit (10)
+        .execute
+end
+```
+
 ## Backup Operations
 
 ```eiffel
@@ -612,6 +649,21 @@ SIMPLE_SQL_PRAGMA_CONFIG      -- Configuration
 SIMPLE_SQL_BACKUP             -- Backup utilities
     ├── copy_memory_to_file()
     └── copy_file_to_memory()
+
+SIMPLE_SQL_FTS5               -- Full-text search (NEW)
+    ├── is_fts5_available()    -- Runtime detection
+    ├── create_table()         -- FTS5 virtual table
+    ├── insert()               -- Add searchable text
+    ├── search()               -- Simple MATCH query
+    └── query_builder()        -- Fluent FTS5 query
+
+SIMPLE_SQL_FTS5_QUERY         -- FTS5 query builder (NEW)
+    ├── match_all()            -- Boolean AND
+    ├── match_any()            -- Boolean OR
+    ├── not_matching()         -- Negation
+    ├── with_rank()            -- Include BM25 score
+    ├── order_by_rank()        -- Sort by relevance
+    └── execute()              -- Run search
 ```
 
 ## Testing
@@ -620,6 +672,9 @@ Comprehensive test suite using EiffelStudio AutoTest framework:
 - `TEST_SIMPLE_SQL` - Core functionality (12 tests)
 - `TEST_SIMPLE_SQL_BACKUP` - Backup operations (5 tests)
 - `TEST_SIMPLE_SQL_JSON` - JSON integration (5 tests)
+- `TEST_SIMPLE_SQL_FTS5` - Full-text search (29 tests) ✅
+
+**Total: 181 tests passing (100% success rate)**
 
 All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolated execution.
 
@@ -747,8 +802,8 @@ All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolate
 
 ## Dependencies
 
-- EiffelStudio 25.02+
-- SQLite3 library (included with EiffelStudio)
+- EiffelStudio 25.02+ or Gobo Eiffel Compiler (gobo-25.09+)
+- **eiffel_sqlite_2025 v1.0.0+** - Modern SQLite 3.51.1 wrapper with FTS5, JSON1, and advanced features
 - SIMPLE_JSON library (for JSON integration)
 
 ## License
@@ -765,10 +820,11 @@ Contributions welcome! Please ensure:
 
 ## Status
 
-**Current Version:** 0.4
+**Current Version:** 0.5
 **Stability:** Beta - Core API stable
-**Production Ready:** Core features production-ready, advanced features in development
-**Test Coverage:** 150 tests passing
+**Production Ready:** Core features and FTS5 full-text search production-ready
+**Test Coverage:** 181 tests passing (100% success rate)
+**SQLite Version:** 3.51.1 (via eiffel_sqlite_2025 v1.0.0)
 
 ---
 
