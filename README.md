@@ -555,6 +555,59 @@ if fts5.is_fts5_available then
 end
 ```
 
+## Automatic Change Tracking (Audit)
+
+Automatically track all changes to database tables using triggers:
+
+```eiffel
+-- Enable auditing for a table
+audit := db.audit
+audit.enable_for_table ("users")
+
+-- Changes are now automatically tracked
+db.execute ("INSERT INTO users (id, name, age) VALUES (1, 'Alice', 30)")
+db.execute ("UPDATE users SET age = 31 WHERE id = 1")
+db.execute ("DELETE FROM users WHERE id = 1")
+
+-- Query audit history for a specific record
+changes := audit.get_changes_for_record ("users", 1)
+across changes.rows as ic loop
+    io.put_string (ic.item.string_value ("operation"))  -- "INSERT", "UPDATE", "DELETE"
+    io.put_string (ic.item.string_value ("timestamp"))  -- ISO 8601 timestamp
+    io.put_string (ic.item.string_value ("new_values")) -- JSON of new values
+end
+
+-- Query recent changes
+recent := audit.get_latest_changes ("users", 10)  -- Last 10 changes
+
+-- Query by operation type
+inserts := audit.get_changes_by_operation ("users", "INSERT")
+updates := audit.get_changes_by_operation ("users", "UPDATE")
+deletes := audit.get_changes_by_operation ("users", "DELETE")
+
+-- Query by time range
+changes_today := audit.get_changes_in_range ("users", 
+    "2025-01-01 00:00:00", "2025-01-01 23:59:59")
+
+-- Analyze what fields changed
+changed_fields := audit.get_changed_fields ("users", audit_id)
+-- Returns ARRAY [STRING_32] of field names that changed
+
+-- Disable auditing (removes triggers, preserves history)
+audit.disable_for_table ("users")
+
+-- Drop audit table (WARNING: deletes all history)
+audit.drop_audit_table ("users")
+```
+
+**Features:**
+- Automatic INSERT/UPDATE/DELETE tracking via SQLite triggers
+- JSON storage of old and new values
+- ISO 8601 timestamps
+- Field-level change detection
+- Query by record, operation type, or time range
+- Immutable audit trail
+
 ## BLOB Handling
 
 ```eiffel

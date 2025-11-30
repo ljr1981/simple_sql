@@ -411,6 +411,18 @@ feature -- JSON Support
 			result_attached: Result /= Void
 		end
 
+feature -- Audit/Change Tracking
+
+	audit: SIMPLE_SQL_AUDIT
+			-- Create audit manager for automatic change tracking
+		require
+			is_open: is_open
+		do
+			create Result.make (Current)
+		ensure
+			result_attached: Result /= Void
+		end
+
 feature -- BLOB Utilities
 
 	read_blob_from_file (a_file_path: STRING_32): detachable MANAGED_POINTER
@@ -483,7 +495,7 @@ feature -- Additional Accessors
 			internal_db.rollback
 		end
 
-feature {SIMPLE_SQL_BACKUP, SIMPLE_SQL_RESULT, SIMPLE_SQL_PREPARED_STATEMENT, SIMPLE_SQL_SCHEMA, SIMPLE_SQL_JSON, SIMPLE_SQL_FTS5} -- Implementation
+feature {SIMPLE_SQL_BACKUP, SIMPLE_SQL_RESULT, SIMPLE_SQL_PREPARED_STATEMENT, SIMPLE_SQL_SCHEMA, SIMPLE_SQL_JSON, SIMPLE_SQL_FTS5, SIMPLE_SQL_AUDIT} -- Implementation
 
 	internal_db: SQLITE_DATABASE
 			-- Underlying sqlite3 database connection
