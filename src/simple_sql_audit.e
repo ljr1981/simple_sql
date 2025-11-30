@@ -102,14 +102,6 @@ feature -- Configuration
 			check internal_db_writable: database.internal_db.is_writable end
 			check internal_db_accessible: database.internal_db.is_accessible end
 			check interface_usable: database.internal_db.is_interface_usable end
-			if not is_enabled (a_table) then
-				create_triggers (a_table)
-					-- Debug: Verify trigger count
-					l_trigger_count := database.query (
-						"SELECT COUNT(*) as cnt FROM sqlite_master WHERE type='trigger' AND name LIKE '" + a_table + "_audit_%'"
-					).first.integer_value ("cnt")
-				check three_triggers_created: l_trigger_count = 3 end
-			end
 		ensure
 			enabled: is_enabled (a_table)
 			has_table: has_audit_table (a_table)
