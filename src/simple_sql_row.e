@@ -150,6 +150,17 @@ feature -- Conversion
 			end
 		end
 
+	blob_value (a_name: STRING_8): detachable MANAGED_POINTER
+			-- BLOB (binary data) value for column
+			-- Returns MANAGED_POINTER containing binary data, or Void if NULL
+		require
+			has_column: has_column (a_name)
+		do
+			if attached {MANAGED_POINTER} column_value (a_name) as al_blob then
+				Result := al_blob
+			end
+		end
+
 	is_null (a_name: STRING_8): BOOLEAN
 			-- Is column null?
 		require

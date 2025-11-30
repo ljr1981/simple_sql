@@ -169,6 +169,20 @@ feature -- Binding by name
 			end
 		end
 
+	bind_blob_by_name (a_name: STRING_8; a_value: MANAGED_POINTER)
+			-- Bind BLOB (binary data) value to named parameter
+		require
+			name_not_empty: not a_name.is_empty
+			value_not_void: a_value /= Void
+		local
+			l_index: INTEGER
+		do
+			l_index := parameter_index (a_name)
+			if l_index > 0 then
+				bind_blob (l_index, a_value)
+			end
+		end
+
 	bind_null_by_name (a_name: STRING_8)
 			-- Bind NULL to named parameter
 		require
@@ -340,6 +354,8 @@ feature {NONE} -- Implementation
 			i, l_param_index: INTEGER
 			c: CHARACTER_8
 			l_in_string: BOOLEAN
+			l_param_name: STRING_8
+			j: INTEGER
 		do
 			create l_result.make (sql.count + 50)
 			l_param_index := 0
@@ -355,12 +371,35 @@ feature {NONE} -- Implementation
 				elseif not l_in_string and c = '?' then
 					l_param_index := l_param_index + 1
 					l_result.append (value_as_sql (bindings.item (l_param_index)))
+				elseif not l_in_string and (c = ':' or c = '@' or c = '$') then
+					-- Handle named parameter
+					create l_param_name.make (20)
+					l_param_name.append_character (c)
+					-- Extract parameter name
+					from j := i + 1 until j > sql.count or not is_identifier_char (sql.item (j)) loop
+						l_param_name.append_character (sql.item (j))
+						j := j + 1
+					end
+					-- Look up and substitute
+					l_param_index := parameter_index (l_param_name)
+					if l_param_index > 0 and l_param_index <= bindings.count then
+						l_result.append (value_as_sql (bindings.item (l_param_index)))
+					else
+						l_result.append (l_param_name)  -- Keep original if not found
+					end
+					i := j - 1  -- Skip past parameter name
 				else
 					l_result.append_character (c)
 				end
 				i := i + 1
 			end
 			Result := l_result
+		end
+
+	is_identifier_char (c: CHARACTER_8): BOOLEAN
+			-- Is character valid in identifier (alphanumeric or underscore)?
+		do
+			Result := c.is_alpha_numeric or c = '_'
 		end
 
 	value_as_sql (a_value: detachable ANY): STRING_8
@@ -376,6 +415,8 @@ feature {NONE} -- Implementation
 				Result := l_real.out
 			elseif attached {REAL_32} a_value as l_real32 then
 				Result := l_real32.out
+			elseif attached {MANAGED_POINTER} a_value as l_blob then
+				Result := blob_as_hex_literal (l_blob)
 			elseif attached {READABLE_STRING_GENERAL} a_value as l_string then
 				Result := escaped_string (l_string)
 			else
@@ -383,6 +424,56 @@ feature {NONE} -- Implementation
 			end
 		ensure
 			result_not_empty: not Result.is_empty
+		end
+
+	blob_as_hex_literal (a_blob: MANAGED_POINTER): STRING_8
+			-- Convert BLOB to SQLite hex literal format: X'hexdigits'
+		require
+			blob_not_void: a_blob /= Void
+		local
+			i: INTEGER
+			l_byte: NATURAL_8
+		do
+			create Result.make (a_blob.count * 2 + 3)
+			Result.append ("X'")
+			from i := 0 until i >= a_blob.count loop
+				l_byte := a_blob.read_natural_8 (i)
+				Result.append (byte_to_hex (l_byte))
+				i := i + 1
+			end
+			Result.append_character ('%'')
+		ensure
+			result_not_empty: not Result.is_empty
+			starts_with_x_quote: Result.starts_with ("X'")
+			ends_with_quote: Result.ends_with ("'")
+		end
+
+	byte_to_hex (a_byte: NATURAL_8): STRING_8
+			-- Convert byte to 2-character hex string
+		local
+			l_high, l_low: NATURAL_8
+		do
+			l_high := a_byte |>> 4
+			l_low := a_byte & 0x0F
+			create Result.make (2)
+			Result.append_character (hex_digit (l_high))
+			Result.append_character (hex_digit (l_low))
+		ensure
+			result_length_2: Result.count = 2
+		end
+
+	hex_digit (a_value: NATURAL_8): CHARACTER_8
+			-- Convert 0-15 to hex digit character
+		require
+			valid_range: a_value >= 0 and a_value <= 15
+		do
+			if a_value < 10 then
+				Result := (a_value + 48).to_character_8  -- '0' + value
+			else
+				Result := (a_value + 55).to_character_8  -- 'A' + (value - 10)
+			end
+		ensure
+			valid_hex: (Result >= '0' and Result <= '9') or (Result >= 'A' and Result <= 'F')
 		end
 
 	escaped_string (a_string: READABLE_STRING_GENERAL): STRING_8

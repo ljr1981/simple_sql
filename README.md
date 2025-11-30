@@ -91,7 +91,8 @@ A production-quality, easy-to-use wrapper around the Eiffel SQLite3 library, pro
 - JSON integration with SIMPLE_JSON library
 - Change tracking (affected row counts)
 - **FTS5 Full-Text Search** with BM25 ranking, Boolean queries, and special character handling (NEW)
-- Comprehensive test suite with 181 tests
+- **BLOB Handling** with file I/O, hex encoding, and named parameter binding (NEW)
+- Comprehensive test suite with 189 tests (8 new BLOB/debug tests)
 
 **Design Principles:**
 - Command-Query Separation throughout
@@ -479,6 +480,70 @@ if fts5.is_fts5_available then
 end
 ```
 
+## BLOB Handling
+
+```eiffel
+-- Create table with BLOB column
+db.execute ("CREATE TABLE documents (name TEXT, content BLOB)")
+
+-- Insert BLOB using prepared statement (by index)
+stmt := db.prepare ("INSERT INTO documents (name, content) VALUES (?, ?)")
+stmt.bind_text (1, "image.png")
+stmt.bind_blob (2, my_blob_data)  -- MANAGED_POINTER
+stmt.execute
+
+-- Insert BLOB using named parameters
+stmt := db.prepare ("INSERT INTO documents (name, content) VALUES (:name, :data)")
+stmt.bind_text_by_name (":name", "photo.jpg")
+stmt.bind_blob_by_name (":data", my_blob_data)
+stmt.execute
+
+-- Retrieve BLOB from query
+result := db.query ("SELECT content FROM documents WHERE name = 'image.png'")
+if attached result.first.blob_value ("content") as blob then
+    print ("BLOB size: " + blob.count.out + " bytes")
+    -- Access binary data: blob.read_natural_8 (index)
+end
+
+-- Read binary file into BLOB
+if attached db.read_blob_from_file ("photo.jpg") as file_data then
+    stmt := db.prepare ("INSERT INTO documents (name, content) VALUES (?, ?)")
+    stmt.bind_text (1, "photo.jpg")
+    stmt.bind_blob (2, file_data)
+    stmt.execute
+end
+
+-- Write BLOB to file
+result := db.query ("SELECT content FROM documents WHERE name = 'photo.jpg'")
+if attached result.first.blob_value ("content") as blob then
+    db.write_blob_to_file (blob, "photo_copy.jpg")
+end
+
+-- Complete file storage roundtrip
+-- File -> Database -> File
+if attached db.read_blob_from_file ("document.pdf") as pdf_data then
+    db.execute ("CREATE TABLE files (filename TEXT, data BLOB)")
+    stmt := db.prepare ("INSERT INTO files VALUES (?, ?)")
+    stmt.bind_text (1, "document.pdf")
+    stmt.bind_blob (2, pdf_data)
+    stmt.execute
+
+    -- Later: retrieve and save
+    result := db.query ("SELECT data FROM files WHERE filename = 'document.pdf'")
+    if attached result.first.blob_value ("data") as saved_pdf then
+        db.write_blob_to_file (saved_pdf, "document_restored.pdf")
+    end
+end
+
+-- Handle NULL BLOBs
+result := db.query ("SELECT content FROM documents WHERE name = 'empty'")
+if result.first.is_null ("content") then
+    print ("BLOB is NULL")
+else
+    blob := result.first.blob_value ("content")
+end
+```
+
 ## Backup Operations
 
 ```eiffel
@@ -508,6 +573,8 @@ SIMPLE_SQL_DATABASE           -- Main database interface
     ├── update_builder()       -- Create UPDATE builder
     ├── delete_builder()       -- Create DELETE builder
     ├── schema()               -- Schema introspection
+    ├── read_blob_from_file()  -- Load binary file (NEW)
+    ├── write_blob_to_file()   -- Save BLOB to file (NEW)
     ├── begin_transaction()
     ├── commit()
     ├── rollback()
@@ -548,6 +615,7 @@ SIMPLE_SQL_ROW                -- Individual row
     ├── string_value()         -- Type-safe access
     ├── integer_value()
     ├── real_value()
+    ├── blob_value()           -- BLOB/binary data (NEW)
     ├── is_null()
     └── item([index])          -- Generic access
 
@@ -616,8 +684,9 @@ SIMPLE_SQL_PREPARED_STATEMENT -- Parameterized queries
     ├── bind_integer()         -- Bind by index
     ├── bind_text()
     ├── bind_real()
+    ├── bind_blob()            -- Bind BLOB data (NEW)
     ├── bind_null()
-    ├── bind_*_by_name()       -- Bind by name
+    ├── bind_*_by_name()       -- Bind by name (incl. blob) (NEW)
     ├── execute()
     └── reset()                -- Reuse statement
 
@@ -673,8 +742,10 @@ Comprehensive test suite using EiffelStudio AutoTest framework:
 - `TEST_SIMPLE_SQL_BACKUP` - Backup operations (5 tests)
 - `TEST_SIMPLE_SQL_JSON` - JSON integration (5 tests)
 - `TEST_SIMPLE_SQL_FTS5` - Full-text search (29 tests) ✅
+- `TEST_SIMPLE_SQL_BLOB` - BLOB handling (7 tests) ✅
+- `TEST_BLOB_DEBUG` - Debug utilities (1 test) ✅
 
-**Total: 181 tests passing (100% success rate)**
+**Total: 189 tests passing (100% success rate)**
 
 All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolated execution.
 
@@ -743,11 +814,15 @@ All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolate
 - Query builder with fluent API ✅
 - Highlight/snippet generation (future enhancement)
 
-**BLOB Handling** (Next)
-- Streaming large binary data
-- Incremental read/write
-- Memory-efficient processing
-- Direct file ↔ BLOB operations
+**BLOB Handling** ✅
+- BLOB insert/retrieve with prepared statements ✅
+- Named parameter binding for BLOBs ✅
+- Hex encoding for SQL compatibility ✅
+- File → Database operations (`read_blob_from_file`) ✅
+- Database → File operations (`write_blob_to_file`) ✅
+- NULL BLOB handling ✅
+- Large BLOB support (tested with 1MB+) ✅
+- Incremental I/O via native SQLite (future enhancement)
 
 **Advanced JSON Support** (Next)
 - JSON path queries (leveraging SQLite json_extract)
@@ -828,10 +903,10 @@ Contributions welcome! Please ensure:
 
 ## Status
 
-**Current Version:** 0.5
+**Current Version:** 0.6
 **Stability:** Beta - Core API stable
-**Production Ready:** Core features and FTS5 full-text search production-ready
-**Test Coverage:** 181 tests passing (100% success rate)
+**Production Ready:** Core features, FTS5 full-text search, and BLOB handling production-ready
+**Test Coverage:** 189 tests passing (100% success rate)
 **SQLite Version:** 3.51.1 (via eiffel_sqlite_2025 v1.0.0)
 
 ---

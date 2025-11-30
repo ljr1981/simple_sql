@@ -399,6 +399,41 @@ feature -- Full-Text Search
 			result_attached: Result /= Void
 		end
 
+feature -- BLOB Utilities
+
+	read_blob_from_file (a_file_path: STRING_32): detachable MANAGED_POINTER
+			-- Read binary file into MANAGED_POINTER for use with BLOB columns
+			-- Returns Void if file cannot be read
+		require
+			file_path_not_empty: not a_file_path.is_empty
+		local
+			l_file: RAW_FILE
+			l_size: INTEGER
+		do
+			create l_file.make_with_name (a_file_path)
+			if l_file.exists and then l_file.is_readable then
+				l_file.open_read
+				l_size := l_file.count
+				create Result.make (l_size)
+				l_file.read_to_managed_pointer (Result, 0, l_size)
+				l_file.close
+			end
+		end
+
+	write_blob_to_file (a_blob: MANAGED_POINTER; a_file_path: STRING_32)
+			-- Write BLOB data (MANAGED_POINTER) to file
+			-- Creates or overwrites the file at a_file_path
+		require
+			blob_not_void: a_blob /= Void
+			file_path_not_empty: not a_file_path.is_empty
+		local
+			l_file: RAW_FILE
+		do
+			create l_file.make_create_read_write (a_file_path)
+			l_file.put_managed_pointer (a_blob, 0, a_blob.count)
+			l_file.close
+		end
+
 feature -- Additional Accessors
 
 	last_insert_rowid: INTEGER_64
