@@ -4,6 +4,41 @@
 
 A production-quality, easy-to-use wrapper around the Eiffel SQLite3 library, providing a clean, intuitive interface for database operations with comprehensive error handling and Design by Contract principles.
 
+## The Elevator Pitch
+
+SIMPLE_SQL isn't just another database wrapper - it's an API designed by *building real applications*.
+
+Most libraries are designed top-down: imagine what features users might need, implement them, hope they're useful. SIMPLE_SQL is designed bottom-up: we build realistic mock applications (TODO list, CPM project scheduler, etc.) and let the friction guide API improvements.
+
+**The result?** An API that eliminates boilerplate, not one that creates it.
+
+```eiffel
+-- Instead of this (5 lines of ceremony):
+l_stmt := db.prepare ("INSERT INTO users (name, age) VALUES (?, ?)")
+l_stmt.bind_text (1, "Alice")
+l_stmt.bind_integer (2, 30)
+l_stmt.execute
+
+-- You write this (1 line that just works):
+db.execute_with_args ("INSERT INTO users (name, age) VALUES (?, ?)", <<"Alice", 30>>)
+```
+
+Every convenience method in SIMPLE_SQL exists because a real application needed it, not because we thought it might be useful someday.
+
+## Mock-Driven Development
+
+The `src/` directory contains mock applications that serve dual purposes:
+
+1. **Demonstrate** how to use SIMPLE_SQL in realistic scenarios
+2. **Stress-test** the API to expose friction and drive improvements
+
+| Mock App | Domain | Activities | What It Tests |
+|----------|--------|------------|---------------|
+| `todo_app` | Task management | CRUD, queries | Basic patterns |
+| `cpm_app` | Project scheduling | 51 activities, 65 dependencies, CPM algorithm | Complex relationships, parameterized queries |
+
+Each mock application has its own test suite. When we add API improvements based on mock app friction, we add tests for both the new API *and* verify the mock app benefits.
+
 ## Features
 
 ### ✅ Implemented (v1.0)
@@ -30,13 +65,19 @@ A production-quality, easy-to-use wrapper around the Eiffel SQLite3 library, pro
 - Error category queries (is_constraint_violation, is_busy, is_readonly, etc.)
 - Specific constraint type detection (unique, primary key, foreign key, check, not null)
 
-**Prepared Statements (NEW):**
+**Prepared Statements:**
 - Parameterized queries preventing SQL injection
 - Parameter binding by index: `bind_integer(1, value)`
 - Parameter binding by name: `bind_text_by_name(":name", value)`
 - Support for INTEGER, REAL, TEXT, BLOB, and NULL types
 - Statement reset for efficient reuse
 - Automatic type conversion and escaping
+
+**Convenience Methods (NEW - from mock app development):**
+- `execute_with_args(sql, args)` - Execute with auto-bound parameters
+- `query_with_args(sql, args)` - Query with auto-bound parameters
+- Automatic type detection: INTEGER, INTEGER_64, REAL_64, STRING, BOOLEAN, MANAGED_POINTER, Void (NULL)
+- Eliminates manual prepared statement binding boilerplate
 
 **PRAGMA Configuration (NEW):**
 - Named configuration presets: `make_wal`, `make_performance`, `make_safe`
@@ -97,7 +138,7 @@ A production-quality, easy-to-use wrapper around the Eiffel SQLite3 library, pro
 - **Repository Pattern** with generic CRUD operations, find_all, find_by_id, find_where, pagination
 - **Vector Embeddings** for ML/AI with similarity search, K-nearest neighbors, cosine/Euclidean distance
 - **Online Backup API** with progress callbacks, incremental backup, export/import (CSV, JSON, SQL) (NEW)
-- Comprehensive test suite with 339 tests (100% passing)
+- Comprehensive test suite with 346+ tests (100% passing)
 
 **Design Principles:**
 - Command-Query Separation throughout
@@ -155,6 +196,29 @@ stmt.execute
 stmt := db.prepare ("SELECT * FROM users WHERE name = :name")
 stmt.bind_text_by_name (":name", "Alice")
 result := stmt.execute_returning_result
+```
+
+## Parameterized Convenience Methods
+
+The easiest way to work with parameters - automatic type detection and binding:
+
+```eiffel
+-- Execute with parameters (INSERT, UPDATE, DELETE)
+db.execute_with_args ("INSERT INTO users (name, age, score) VALUES (?, ?, ?)",
+    <<"Alice", 30, 95.5>>)
+
+-- Query with parameters
+result := db.query_with_args ("SELECT * FROM users WHERE age > ? AND status = ?",
+    <<21, "active">>)
+
+-- Supported types (auto-detected):
+-- INTEGER, INTEGER_64, REAL_64, STRING, BOOLEAN, MANAGED_POINTER (BLOB), Void (NULL)
+db.execute_with_args ("INSERT INTO data (int_col, str_col, null_col) VALUES (?, ?, ?)",
+    <<42, "text", Void>>)  -- Void becomes NULL
+
+-- Works great with manifest arrays
+db.execute_with_args ("UPDATE products SET price = ?, stock = ? WHERE id = ?",
+    <<24.99, 100, product_id>>)
 ```
 
 ## Error Handling
@@ -1100,7 +1164,9 @@ AGENT_PART_COMPARATOR [G]     -- Agent-based comparator wrapper
 ## Testing
 
 Comprehensive test suite using EiffelStudio AutoTest framework:
-- `TEST_SIMPLE_SQL` - Core functionality (12 tests) ✅ +1 edge case
+
+**Core Library Tests:**
+- `TEST_SIMPLE_SQL` - Core functionality (19 tests) - includes convenience method tests
 - `TEST_SIMPLE_SQL_BACKUP` - Backup operations (5 tests)
 - `TEST_SIMPLE_SQL_BATCH` - Batch operations (12 tests) ✅ +1 edge case
 - `TEST_SIMPLE_SQL_BLOB` - BLOB handling (7 tests)
@@ -1120,7 +1186,12 @@ Comprehensive test suite using EiffelStudio AutoTest framework:
 - `TEST_SIMPLE_SQL_ADVANCED_BACKUP` - Online backup, export/import (24 tests) ✅ +8 edge cases
 - `TEST_BLOB_DEBUG` - Debug utilities (1 test)
 
-**Total: 339 tests (100% passing)**
+**Mock Application Tests:**
+- `TEST_TODO_APP` - TODO application (36 tests)
+- `TEST_CPM_APP` - CPM scheduler basic tests (20 tests)
+- `TEST_CPM_APP_STRESS` - CPM stress tests with 51-activity construction project (7 tests)
+
+**Total: 400+ tests (100% passing)**
 
 All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolated execution.
 
@@ -1307,9 +1378,11 @@ Contributions welcome! Please ensure:
 **Current Version:** 1.0
 **Stability:** Production - Core API stable
 **Production Ready:** Phases 1-5 complete. All features production-ready: core CRUD, prepared statements, PRAGMA configuration, batch operations, fluent query builder, schema introspection, migrations, streaming, FTS5 full-text search, BLOB handling, JSON1 extension, audit tracking, repository pattern, vector embeddings, online backup, and export/import.
-**Test Coverage:** 339 tests (100% passing) - includes 51 edge case tests from Grok code review (Priorities 1-8 complete)
+**Test Coverage:** 400+ tests (100% passing) - includes 51 edge case tests from Grok code review + mock application integration tests
 **SQLite Version:** 3.51.1 (via eiffel_sqlite_2025 v1.0.0)
 
 ---
 
 **Built with Eiffel's Design by Contract principles for maximum reliability.**
+
+**Refined through Mock-Driven Development for maximum usability.**

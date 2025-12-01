@@ -29,6 +29,44 @@ Before ending, update:
 
 ---
 
+## Mock-Driven Development Process
+
+SIMPLE_SQL is developed using **Mock-Driven Development** - building realistic consumer applications to drive API improvements.
+
+### Why Mock Apps?
+
+1. **Expose real friction** - Unit tests verify correctness; mock apps reveal usability problems
+2. **Drive boilerplate elimination** - Every convenience method exists because a real app needed it
+3. **Integration testing** - Mock apps serve as comprehensive integration tests
+4. **Documentation by example** - Working apps show how to use the library
+
+### Current Mock Applications
+
+| Target | Domain | Complexity | API Improvements Driven |
+|--------|--------|------------|------------------------|
+| `todo_app` | Task management | Basic CRUD | Initial patterns |
+| `cpm_app` | Project scheduling | 51 activities, 65 dependencies, CPM algorithm | `execute_with_args`, `query_with_args` |
+
+### The Process
+
+```
+1. Choose a domain (different from previous mocks)
+2. Build a realistic application using SIMPLE_SQL
+3. Note friction points (boilerplate, awkward patterns)
+4. Add convenience methods to eliminate friction
+5. Add tests for new API features
+6. Verify mock app code simplifies
+7. Repeat with next domain
+```
+
+### Planned Future Mocks
+
+- **Document Store** - Heavy JSON storage, complex queries
+- **Reporting App** - Complex aggregations, exports
+- **Audit System** - Change tracking, history queries
+
+---
+
 ## Current State
 
 **Phases 1-5 Complete.** The library now includes:
@@ -56,7 +94,7 @@ Before ending, update:
 - **SIMPLE_SQL_EXPORT**: Export to CSV, JSON, SQL dump formats (NEW)
 - **SIMPLE_SQL_IMPORT**: Import from CSV, JSON, SQL formats (NEW)
 
-**339 tests (100% passing). Production-ready for all Phase 1-5 features.**
+**400+ tests (100% passing). Production-ready for all Phase 1-5 features.**
 
 Test expansion complete based on Grok code review (see `D:/prod/reference_docs/eiffel/SIMPLE_SQL_TEST_EXPANSION_PLAN.md`):
 - ✅ Priority 1: Backup/Import/Export Edge Cases (8 tests)

@@ -190,6 +190,40 @@ feature -- Basic operations
 			create Result.make_empty
 		end
 
+feature -- Parameterized Operations (convenience methods)
+
+	execute_with_args (a_sql: READABLE_STRING_8; a_args: ARRAY [detachable ANY])
+			-- Execute SQL with parameters. Use ? placeholders.
+			-- Supported types: INTEGER, INTEGER_64, REAL_64, STRING, BOOLEAN, Void (NULL)
+			-- Example: execute_with_args ("INSERT INTO t (a, b) VALUES (?, ?)", <<123, "text">>)
+		require
+			is_open: is_open
+			sql_not_empty: not a_sql.is_empty
+		local
+			l_stmt: SIMPLE_SQL_PREPARED_STATEMENT
+		do
+			clear_error
+			l_stmt := prepare (a_sql)
+			bind_args (l_stmt, a_args)
+			l_stmt.execute
+		end
+
+	query_with_args (a_sql: READABLE_STRING_8; a_args: ARRAY [detachable ANY]): SIMPLE_SQL_RESULT
+			-- Execute query with parameters. Use ? placeholders.
+			-- Supported types: INTEGER, INTEGER_64, REAL_64, STRING, BOOLEAN, Void (NULL)
+			-- Example: query_with_args ("SELECT * FROM t WHERE id = ?", <<123>>)
+		require
+			is_open: is_open
+			sql_not_empty: not a_sql.is_empty
+		local
+			l_stmt: SIMPLE_SQL_PREPARED_STATEMENT
+		do
+			clear_error
+			l_stmt := prepare (a_sql)
+			bind_args (l_stmt, a_args)
+			Result := l_stmt.execute_returning_result
+		end
+
 	begin_transaction
 			-- Begin transaction (deferred mode)
 		require
@@ -507,6 +541,33 @@ feature {NONE} -- Implementation
 		do
 			if not internal_db.is_closed then
 				internal_db.close
+			end
+		end
+
+	bind_args (a_stmt: SIMPLE_SQL_PREPARED_STATEMENT; a_args: ARRAY [detachable ANY])
+			-- Bind array of arguments to prepared statement.
+		local
+			i: INTEGER
+		do
+			from i := a_args.lower until i > a_args.upper loop
+				if attached a_args.item (i) as l_arg then
+					if attached {INTEGER_64} l_arg as l_int64 then
+						a_stmt.bind_integer (i - a_args.lower + 1, l_int64)
+					elseif attached {INTEGER_32} l_arg as l_int32 then
+						a_stmt.bind_integer (i - a_args.lower + 1, l_int32.to_integer_64)
+					elseif attached {REAL_64} l_arg as l_real then
+						a_stmt.bind_real (i - a_args.lower + 1, l_real)
+					elseif attached {READABLE_STRING_GENERAL} l_arg as l_str then
+						a_stmt.bind_text (i - a_args.lower + 1, l_str)
+					elseif attached {BOOLEAN} l_arg as l_bool then
+						a_stmt.bind_integer (i - a_args.lower + 1, if l_bool then 1 else 0 end)
+					elseif attached {MANAGED_POINTER} l_arg as l_blob then
+						a_stmt.bind_blob (i - a_args.lower + 1, l_blob)
+					end
+				else
+					a_stmt.bind_null (i - a_args.lower + 1)
+				end
+				i := i + 1
 			end
 		end
 

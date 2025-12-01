@@ -15,7 +15,12 @@
 		<library name="base_extension" location="$ISE_LIBRARY\library\base_extension\base_extension.ecf"/>
 		<library name="simple_json" location="D:\prod\simple_json\simple_json.ecf"/>
 		<library name="sqlite" location="D:\prod\eiffel_sqlite_2025\sqlite_2025.ecf"/>
-		<cluster name="src" location=".\src\" recursive="true"/>
+		<cluster name="src" location=".\src\" recursive="true">
+			<file_rule>
+				<exclude>/todo_app$</exclude>
+				<exclude>/cpm_app$</exclude>
+			</file_rule>
+		</cluster>
 	</target>
 	<target name="simple_sql_tests" extends="simple_sql">
 		<root class="APPLICATION" feature="make"/>
@@ -25,6 +30,39 @@
 		<setting name="console_application" value="true"/>
 		<library name="testing" location="$ISE_LIBRARY\library\testing\testing.ecf"/>
 		<library name="testing_ext" location="D:\prod\testing_ext\testing_ext.ecf"/>
-		<cluster name="test" location=".\testing\" recursive="true"/>
+		<cluster name="test" location=".\testing\" recursive="true">
+			<file_rule>
+				<exclude>/todo_app$</exclude>
+				<exclude>/cpm_app$</exclude>
+			</file_rule>
+		</cluster>
+	</target>
+	<target name="todo_app" extends="simple_sql">
+		<root class="TODO_APP" feature="make"/>
+		<option warning="warning">
+			<assertions precondition="true" postcondition="true" check="true" invariant="true" loop="true" supplier_precondition="true"/>
+		</option>
+		<setting name="console_application" value="true"/>
+		<cluster name="todo_app_src" location=".\src\todo_app\" recursive="true"/>
+	</target>
+	<target name="todo_app_tests" extends="todo_app">
+		<root class="APPLICATION" feature="make"/>
+		<library name="testing" location="$ISE_LIBRARY\library\testing\testing.ecf"/>
+		<library name="testing_ext" location="D:\prod\testing_ext\testing_ext.ecf"/>
+		<cluster name="todo_app_test" location=".\testing\todo_app\" recursive="true"/>
+	</target>
+	<target name="cpm_app" extends="simple_sql">
+		<root class="CPM_APP" feature="make"/>
+		<option warning="warning">
+			<assertions precondition="true" postcondition="true" check="true" invariant="true" loop="true" supplier_precondition="true"/>
+		</option>
+		<setting name="console_application" value="true"/>
+		<cluster name="cpm_app_src" location=".\src\cpm_app\" recursive="true"/>
+	</target>
+	<target name="cpm_app_tests" extends="cpm_app">
+		<root class="APPLICATION" feature="make"/>
+		<library name="testing" location="$ISE_LIBRARY\library\testing\testing.ecf"/>
+		<library name="testing_ext" location="D:\prod\testing_ext\testing_ext.ecf"/>
+		<cluster name="cpm_app_test" location=".\testing\cpm_app\" recursive="true"/>
 	</target>
 </system>

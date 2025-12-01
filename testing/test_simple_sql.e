@@ -278,6 +278,167 @@ feature -- Test routines: Edge Cases (Priority 3)
 			retry
 		end
 
+feature -- Test routines: Parameterized Convenience Methods
+
+	test_execute_with_args_insert
+			-- Test execute_with_args for INSERT with various parameter types.
+		note
+			testing: "covers/{SIMPLE_SQL_DATABASE}.execute_with_args"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_result: SIMPLE_SQL_RESULT
+		do
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER, score REAL)")
+
+			-- Insert with mixed parameter types
+			l_db.execute_with_args ("INSERT INTO users (name, age, score) VALUES (?, ?, ?)", <<"Alice", 30, 95.5>>)
+			l_db.execute_with_args ("INSERT INTO users (name, age, score) VALUES (?, ?, ?)", <<"Bob", 25, 88.0>>)
+
+			l_result := l_db.query ("SELECT * FROM users ORDER BY name")
+			assert_equal ("count", 2, l_result.count)
+			assert_strings_equal ("first_name", "Alice", l_result.first.string_value ("name"))
+			assert_equal ("first_age", 30, l_result.first.integer_value ("age"))
+			assert_reals_equal ("first_score", 95.5, l_result.first.real_value ("score"), 0.001)
+
+			l_db.close
+		end
+
+	test_execute_with_args_update
+			-- Test execute_with_args for UPDATE.
+		note
+			testing: "covers/{SIMPLE_SQL_DATABASE}.execute_with_args"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_result: SIMPLE_SQL_RESULT
+		do
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, price REAL)")
+			l_db.execute_with_args ("INSERT INTO products (name, price) VALUES (?, ?)", <<"Widget", 19.99>>)
+
+			l_db.execute_with_args ("UPDATE products SET price = ? WHERE name = ?", <<24.99, "Widget">>)
+
+			l_result := l_db.query ("SELECT price FROM products WHERE name = 'Widget'")
+			assert_reals_equal ("updated_price", 24.99, l_result.first.real_value ("price"), 0.001)
+
+			l_db.close
+		end
+
+	test_execute_with_args_null
+			-- Test execute_with_args handles NULL values (Void).
+		note
+			testing: "covers/{SIMPLE_SQL_DATABASE}.execute_with_args"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_result: SIMPLE_SQL_RESULT
+		do
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE contacts (id INTEGER PRIMARY KEY, name TEXT, phone TEXT)")
+
+			-- Insert with NULL phone
+			l_db.execute_with_args ("INSERT INTO contacts (name, phone) VALUES (?, ?)", <<"Alice", Void>>)
+
+			l_result := l_db.query ("SELECT * FROM contacts WHERE name = 'Alice'")
+			assert_true ("phone_is_null", l_result.first.is_null ("phone"))
+
+			l_db.close
+		end
+
+	test_execute_with_args_integer_64
+			-- Test execute_with_args handles INTEGER_64 values.
+		note
+			testing: "covers/{SIMPLE_SQL_DATABASE}.execute_with_args"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_result: SIMPLE_SQL_RESULT
+			l_big_id: INTEGER_64
+		do
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE large_ids (id INTEGER PRIMARY KEY, big_value INTEGER)")
+
+			l_big_id := 9223372036854775807 -- max INTEGER_64
+			l_db.execute_with_args ("INSERT INTO large_ids (big_value) VALUES (?)", <<l_big_id>>)
+
+			l_result := l_db.query ("SELECT big_value FROM large_ids")
+			assert_true ("big_value", l_big_id = l_result.first.integer_64_value ("big_value"))
+
+			l_db.close
+		end
+
+	test_query_with_args_select
+			-- Test query_with_args for parameterized SELECT.
+		note
+			testing: "covers/{SIMPLE_SQL_DATABASE}.query_with_args"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_result: SIMPLE_SQL_RESULT
+		do
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE items (id INTEGER PRIMARY KEY, category TEXT, price REAL)")
+			l_db.execute ("INSERT INTO items (category, price) VALUES ('A', 10.0)")
+			l_db.execute ("INSERT INTO items (category, price) VALUES ('A', 20.0)")
+			l_db.execute ("INSERT INTO items (category, price) VALUES ('B', 30.0)")
+			l_db.execute ("INSERT INTO items (category, price) VALUES ('B', 40.0)")
+
+			-- Query with category filter
+			l_result := l_db.query_with_args ("SELECT * FROM items WHERE category = ?", <<"A">>)
+			assert_equal ("category_a_count", 2, l_result.count)
+
+			-- Query with price threshold
+			l_result := l_db.query_with_args ("SELECT * FROM items WHERE price > ?", <<25.0>>)
+			assert_equal ("price_gt_25_count", 2, l_result.count)
+
+			l_db.close
+		end
+
+	test_query_with_args_multiple_params
+			-- Test query_with_args with multiple parameters.
+		note
+			testing: "covers/{SIMPLE_SQL_DATABASE}.query_with_args"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_result: SIMPLE_SQL_RESULT
+		do
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE products (id INTEGER PRIMARY KEY, name TEXT, category TEXT, price REAL)")
+			l_db.execute ("INSERT INTO products (name, category, price) VALUES ('Widget A', 'tools', 10.0)")
+			l_db.execute ("INSERT INTO products (name, category, price) VALUES ('Widget B', 'tools', 50.0)")
+			l_db.execute ("INSERT INTO products (name, category, price) VALUES ('Gadget A', 'electronics', 30.0)")
+
+			-- Query with category AND price range
+			l_result := l_db.query_with_args (
+				"SELECT * FROM products WHERE category = ? AND price > ?",
+				<<"tools", 15.0>>
+			)
+			assert_equal ("one_match", 1, l_result.count)
+			assert_strings_equal ("widget_b", "Widget B", l_result.first.string_value ("name"))
+
+			l_db.close
+		end
+
+	test_query_with_args_integer_64
+			-- Test query_with_args with INTEGER_64 parameter.
+		note
+			testing: "covers/{SIMPLE_SQL_DATABASE}.query_with_args"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_result: SIMPLE_SQL_RESULT
+			l_search_id: INTEGER_64
+		do
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE records (id INTEGER PRIMARY KEY, data TEXT)")
+			l_db.execute ("INSERT INTO records (id, data) VALUES (1, 'first')")
+			l_db.execute ("INSERT INTO records (id, data) VALUES (2, 'second')")
+			l_db.execute ("INSERT INTO records (id, data) VALUES (3, 'third')")
+
+			l_search_id := 2
+			l_result := l_db.query_with_args ("SELECT * FROM records WHERE id = ?", <<l_search_id>>)
+			assert_equal ("one_result", 1, l_result.count)
+			assert_strings_equal ("second_data", "second", l_result.first.string_value ("data"))
+
+			l_db.close
+		end
+
 note
 	copyright: "Copyright (c) 2025, Larry Rix"
 	license: "MIT License"
