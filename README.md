@@ -6,7 +6,7 @@ A production-quality, easy-to-use wrapper around the Eiffel SQLite3 library, pro
 
 ## Features
 
-### ✅ Implemented (v0.4)
+### ✅ Implemented (v0.8)
 
 **Core Database Operations:**
 - Simple database creation (file-based and in-memory)
@@ -93,8 +93,9 @@ A production-quality, easy-to-use wrapper around the Eiffel SQLite3 library, pro
 - Change tracking (affected row counts)
 - **FTS5 Full-Text Search** with BM25 ranking, Boolean queries, and special character handling
 - **BLOB Handling** with file I/O, hex encoding, and named parameter binding
-- **Automatic Audit/Change Tracking** with trigger-based change capture and JSON storage (NEW)
-- Comprehensive test suite with 211 tests (210 passing)
+- **Automatic Audit/Change Tracking** with trigger-based change capture and JSON storage
+- **Repository Pattern** with generic CRUD operations, find_all, find_by_id, find_where, pagination (NEW)
+- Comprehensive test suite with 250 tests (100% passing)
 
 **Design Principles:**
 - Command-Query Separation throughout
@@ -609,6 +610,99 @@ audit.drop_audit_table ("users")
 - Query by record, operation type, or time range
 - Immutable audit trail
 
+## Repository Pattern
+
+Generic repository pattern for type-safe CRUD operations:
+
+```eiffel
+-- Define your entity class
+class USER_ENTITY
+feature
+    id: INTEGER_64
+    name: STRING_8
+    age: INTEGER
+    status: STRING_8
+end
+
+-- Create a repository by inheriting SIMPLE_SQL_REPOSITORY
+class USER_REPOSITORY inherit SIMPLE_SQL_REPOSITORY [USER_ENTITY]
+feature
+    table_name: STRING_8 = "users"
+    primary_key_column: STRING_8 = "id"
+
+    row_to_entity (a_row: SIMPLE_SQL_ROW): USER_ENTITY
+        do
+            create Result.make (
+                a_row.integer_value ("id").to_integer_64,
+                a_row.string_value ("name").to_string_8,
+                a_row.integer_value ("age"),
+                a_row.string_value ("status").to_string_8
+            )
+        end
+
+    entity_to_columns (a_entity: USER_ENTITY): HASH_TABLE [detachable ANY, STRING_8]
+        do
+            create Result.make (3)
+            Result.put (a_entity.name, "name")
+            Result.put (a_entity.age, "age")
+            Result.put (a_entity.status, "status")
+        end
+
+    entity_id (a_entity: USER_ENTITY): INTEGER_64
+        do Result := a_entity.id end
+end
+
+-- Use the repository
+create repo.make (db)
+
+-- Find all
+all_users := repo.find_all
+active_users := repo.find_where ("status = 'active'")
+
+-- Find by ID
+user := repo.find_by_id (42)
+
+-- Pagination
+page_1 := repo.find_all_limited (10, 0)   -- First 10
+page_2 := repo.find_all_limited (10, 10)  -- Next 10
+
+-- Ordering
+sorted := repo.find_all_ordered ("name ASC")
+filtered_sorted := repo.find_where_ordered ("age > 21", "age DESC")
+
+-- Count
+total := repo.count
+active_count := repo.count_where ("status = 'active'")
+
+-- Insert (returns new ID)
+create new_user.make (0, "Alice", 30, "active")
+new_id := repo.insert (new_user)
+
+-- Update
+user.set_age (31)
+success := repo.update (user)
+
+-- Save (insert or update based on ID)
+saved_id := repo.save (user)
+
+-- Delete
+success := repo.delete (42)
+deleted_count := repo.delete_where ("status = 'inactive'")
+all_deleted := repo.delete_all
+```
+
+**Features:**
+- Generic deferred class `SIMPLE_SQL_REPOSITORY [G]`
+- Complete CRUD operations (Create, Read, Update, Delete)
+- `find_all`, `find_by_id`, `find_where`, `find_first_where`
+- Pagination with `find_all_limited (limit, offset)`
+- Ordering with `find_all_ordered`, `find_where_ordered`
+- Counting with `count`, `count_where`
+- Bulk operations: `update_where`, `delete_where`, `delete_all`
+- `save` for insert-or-update semantics
+- `exists` check for ID existence
+- Error status via `has_error`, `last_error_message`
+
 ## BLOB Handling
 
 ```eiffel
@@ -855,29 +949,53 @@ SIMPLE_SQL_FTS5               -- Full-text search (NEW)
     ├── search()               -- Simple MATCH query
     └── query_builder()        -- Fluent FTS5 query
 
-SIMPLE_SQL_FTS5_QUERY         -- FTS5 query builder (NEW)
+SIMPLE_SQL_FTS5_QUERY         -- FTS5 query builder
     ├── match_all()            -- Boolean AND
     ├── match_any()            -- Boolean OR
     ├── not_matching()         -- Negation
     ├── with_rank()            -- Include BM25 score
     ├── order_by_rank()        -- Sort by relevance
     └── execute()              -- Run search
+
+SIMPLE_SQL_REPOSITORY [G]     -- Generic repository pattern (NEW)
+    ├── find_all()             -- Get all entities
+    ├── find_by_id()           -- Find by primary key
+    ├── find_where()           -- Conditional query
+    ├── find_first_where()     -- First matching entity
+    ├── find_all_ordered()     -- Sorted results
+    ├── find_all_limited()     -- Pagination support
+    ├── count() / count_where()-- Row counting
+    ├── exists()               -- ID existence check
+    ├── insert()               -- Create new entity
+    ├── update()               -- Modify existing
+    ├── save()                 -- Insert or update
+    ├── delete()               -- Remove by ID
+    ├── delete_where()         -- Bulk delete
+    └── delete_all()           -- Clear table
 ```
 
 ## Testing
 
 Comprehensive test suite using EiffelStudio AutoTest framework:
-- `TEST_SIMPLE_SQL` - Core functionality (12 tests)
+- `TEST_SIMPLE_SQL` - Core functionality (11 tests)
 - `TEST_SIMPLE_SQL_BACKUP` - Backup operations (5 tests)
-- `TEST_SIMPLE_SQL_JSON` - JSON integration (5 tests)
-- `TEST_SIMPLE_SQL_JSON_ADVANCED` - Advanced JSON1 operations (21 tests) ✅
-- `TEST_SIMPLE_SQL_FTS5` - Full-text search (29 tests) ✅
-- `TEST_SIMPLE_SQL_BLOB` - BLOB handling (7 tests) ✅
+- `TEST_SIMPLE_SQL_BATCH` - Batch operations (11 tests)
+- `TEST_SIMPLE_SQL_BLOB` - BLOB handling (7 tests)
+- `TEST_SIMPLE_SQL_ERROR` - Error handling (20 tests)
+- `TEST_SIMPLE_SQL_FTS5` - Full-text search (31 tests)
+- `TEST_SIMPLE_SQL_JSON` - JSON integration (6 tests)
+- `TEST_SIMPLE_SQL_JSON_ADVANCED` - JSON1 extension (21 tests)
 - `TEST_SIMPLE_SQL_AUDIT` - Change tracking (16 tests)
-- `TEST_BLOB_DEBUG` - Debug utilities (1 test) ✅
-- Additional test suites: Batch, Error, Streaming, Query Builders, Schema, Pragma, Prepared Statements, Migration
+- `TEST_SIMPLE_SQL_MIGRATION` - Schema migrations (11 tests)
+- `TEST_SIMPLE_SQL_PRAGMA_CONFIG` - PRAGMA settings (17 tests)
+- `TEST_SIMPLE_SQL_PREPARED_STATEMENT` - Prepared statements (10 tests)
+- `TEST_SIMPLE_SQL_QUERY_BUILDERS` - Query builders (30 tests)
+- `TEST_SIMPLE_SQL_REPOSITORY` - Repository pattern (23 tests) ✅ NEW
+- `TEST_SIMPLE_SQL_SCHEMA` - Schema introspection (11 tests)
+- `TEST_SIMPLE_SQL_STREAMING` - Result streaming (19 tests)
+- `TEST_BLOB_DEBUG` - Debug utilities (1 test)
 
-**Total: 226 tests (100% passing)**
+**Total: 250 tests (100% passing)**
 
 All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolated execution.
 
@@ -936,37 +1054,44 @@ All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolate
 - Full `across` loop integration
 - Prepared statement and query builder integration
 
-### ✅ Phase 4: Advanced Features (PARTIALLY COMPLETE)
+### ✅ Phase 4: Advanced Features (COMPLETE)
 
 **Full-Text Search Integration** ✅
-- FTS5 module integration ✅
-- Boolean queries (AND, OR, NOT) ✅
-- BM25 relevance ranking ✅
-- Special character handling (apostrophes) ✅
-- Query builder with fluent API ✅
-- Highlight/snippet generation (future enhancement)
+- FTS5 module integration
+- Boolean queries (AND, OR, NOT)
+- BM25 relevance ranking
+- Special character handling (apostrophes)
+- Query builder with fluent API
 
 **BLOB Handling** ✅
-- BLOB insert/retrieve with prepared statements ✅
-- Named parameter binding for BLOBs ✅
-- Hex encoding for SQL compatibility ✅
-- File → Database operations (`read_blob_from_file`) ✅
-- Database → File operations (`write_blob_to_file`) ✅
-- NULL BLOB handling ✅
-- Large BLOB support (tested with 1MB+) ✅
-- Incremental I/O via native SQLite (future enhancement)
+- BLOB insert/retrieve with prepared statements
+- Named parameter binding for BLOBs
+- Hex encoding for SQL compatibility
+- File → Database operations (`read_blob_from_file`)
+- Database → File operations (`write_blob_to_file`)
+- NULL BLOB handling
+- Large BLOB support (tested with 1MB+)
 
 **Advanced JSON Support** ✅
 - JSON path queries (leveraging SQLite json_extract)
 - JSON aggregation functions
-- Schema validation integration
-- Partial updates with JSON Patch/Merge Patch
+- JSON modification (set, insert, replace, remove)
+- Array and object creation from Eiffel values
 
 **Audit/Change Tracking** ✅
-- Auto-generate triggers
-- Change log table with JSON diffs
+- Auto-generate INSERT/UPDATE/DELETE triggers
+- Change log table with JSON storage
 - Before/after snapshots
-- Timestamp and user tracking
+- Timestamp tracking and field-level change detection
+
+**Repository Pattern** ✅
+- Generic `SIMPLE_SQL_REPOSITORY [G]` deferred class
+- Complete CRUD operations
+- Find by ID, find where, find first where
+- Pagination and ordering support
+- Count and exists queries
+- Bulk update and delete operations
+- Save (insert-or-update) semantics
 
 ### Phase 5: Enterprise Features (Future)
 
@@ -1035,10 +1160,10 @@ Contributions welcome! Please ensure:
 
 ## Status
 
-**Current Version:** 0.7
+**Current Version:** 0.8
 **Stability:** Beta - Core API stable
-**Production Ready:** Core features, FTS5 full-text search, BLOB handling, JSON1 extension, and audit tracking production-ready
-**Test Coverage:** 226 tests (100% passing)
+**Production Ready:** Phases 1-4 complete. Core features, FTS5 full-text search, BLOB handling, JSON1 extension, audit tracking, and repository pattern all production-ready.
+**Test Coverage:** 250 tests (100% passing)
 **SQLite Version:** 3.51.1 (via eiffel_sqlite_2025 v1.0.0)
 
 ---
