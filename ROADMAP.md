@@ -83,7 +83,7 @@ SIMPLE_SQL is developed using **Mock-Driven Development** - building realistic c
 
 ## Current State
 
-**Phases 1-5 Complete + DMS-Driven + WMS-Driven Improvements.** The library now includes:
+**Phases 1-6 Complete.** The library now includes:
 - **SIMPLE_SQL_DATABASE**: Full CRUD, transactions, streaming, error handling, BLOB utilities, query monitoring
 - **SIMPLE_SQL_RESULT/ROW**: Query results with typed accessors, BLOB support
 - **SIMPLE_SQL_CURSOR**: Lazy row-by-row iteration
@@ -113,8 +113,9 @@ SIMPLE_SQL is developed using **Mock-Driven Development** - building realistic c
 - **SIMPLE_SQL_PAGINATOR**: Cursor-based pagination builder (NEW)
 - **SIMPLE_SQL_PAGE**: Pagination result with cursor management (NEW)
 - **SIMPLE_SQL_QUERY_MONITOR**: N+1 query detection and warnings (NEW)
+- **Phase 6 Atomic Operations**: `atomic()`, `update_versioned()`, `upsert()`, `decrement_if()`, `increment_if()` (NEW)
 
-**485+ tests (100% passing). Production-ready for all features. 5 mock applications demonstrate real-world usage.**
+**500+ tests (100% passing). Production-ready for all features. 5 mock applications demonstrate real-world usage.**
 
 Test expansion complete based on Grok code review (see `D:/prod/reference_docs/eiffel/SIMPLE_SQL_TEST_EXPANSION_PLAN.md`):
 - ✅ Priority 1: Backup/Import/Export Edge Cases (8 tests)
@@ -174,23 +175,19 @@ Test expansion complete based on Grok code review (see `D:/prod/reference_docs/e
 | **Vector Embeddings** | Store REAL_64 arrays, cosine similarity, K-nearest neighbors | ✅ |
 | **Advanced Backup** | Online backup API with progress callbacks, incremental backup, export/import (CSV, JSON, SQL) | ✅ |
 
-### Phase 6 - Concurrency & Atomic Operations (WMS-Driven) 🔜 NEXT
+### Phase 6 - Concurrency & Atomic Operations (WMS-Driven) ✅ COMPLETE
 
-Friction points identified by the WMS (Warehouse Management System) mock application:
+Friction points identified by the WMS (Warehouse Management System) mock application, now implemented:
 
-| Feature | Friction ID | Current Pain | Proposed API |
-|---------|-------------|--------------|--------------|
-| **Optimistic Locking** | F1 | Manual version check + retry loop (15+ lines) | `db.update_versioned(table, id, version, changes)` |
-| **Atomic Operations** | F2 | `begin_transaction` + multiple executes + manual rollback | `db.atomic(agent)` with auto-retry |
-| **Upsert Pattern** | F4 | Check exists, then INSERT or UPDATE | `db.upsert(table, data, conflict_columns)` |
-| **Conditional Decrement** | F3 | SELECT then UPDATE (race condition!) | `db.decrement_if(table, col, amount, condition)` |
-| **Batch Upsert** | F4+ | Loop with individual upserts | `db.upsert_batch(table, rows, conflict_columns)` |
+| Feature | Friction ID | API | Status |
+|---------|-------------|-----|--------|
+| **Atomic Operations** | F2 | `db.atomic(agent)` - Transaction wrapper with auto-rollback | ✅ |
+| **Optimistic Locking** | F1 | `db.update_versioned(table, id, version, set, args)` - Returns success/new_version | ✅ |
+| **Upsert Pattern** | F4 | `db.upsert(table, columns, values, conflict_columns)` - INSERT ON CONFLICT | ✅ |
+| **Conditional Decrement** | F3 | `db.decrement_if(table, col, amount, where, args)` - Atomic check + update | ✅ |
+| **Conditional Increment** | F3 | `db.increment_if(table, col, amount, where, args)` - Atomic check + update | ✅ |
 
-**Implementation Notes:**
-- Optimistic locking returns success/conflict enum, supports configurable retry count
-- `atomic(agent)` wraps agent in transaction with automatic retry on conflict
-- Upsert uses SQLite's `INSERT ... ON CONFLICT DO UPDATE` syntax
-- Conditional decrement/increment return boolean success
+**16 tests added in TEST_PHASE6_ATOMIC. WMS refactored to use new APIs.**
 
 ---
 

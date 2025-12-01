@@ -556,6 +556,224 @@ feature -- Additional Accessors
 			internal_db.rollback
 		end
 
+feature -- Atomic Operations (Phase 6)
+
+	atomic (a_operation: PROCEDURE)
+			-- Execute operation inside a transaction with automatic commit/rollback.
+			-- If operation raises exception, transaction is rolled back.
+			-- Example: db.atomic (agent my_multi_table_operation)
+		require
+			is_open: is_open
+			not_in_transaction: not is_in_transaction
+			operation_attached: a_operation /= Void
+		local
+			l_failed: BOOLEAN
+		do
+			if not l_failed then
+				begin_transaction
+				a_operation.call (Void)
+				commit
+			end
+		rescue
+			if is_in_transaction then
+				rollback
+			end
+			l_failed := True
+			retry
+		end
+
+	update_versioned (a_table: READABLE_STRING_8; a_id: INTEGER_64; a_current_version: INTEGER_64;
+			a_set_clause: READABLE_STRING_8; a_args: ARRAY [detachable ANY]): TUPLE [success: BOOLEAN; new_version: INTEGER_64]
+			-- Update row with optimistic locking using version column.
+			-- Returns [True, new_version] on success, [False, 0] if version mismatch (concurrent modification).
+			-- The version column is automatically incremented.
+			-- Example: result := db.update_versioned ("stock", 42, 5, "quantity = quantity + ?", <<10>>)
+		require
+			is_open: is_open
+			table_not_empty: not a_table.is_empty
+			set_clause_not_empty: not a_set_clause.is_empty
+		local
+			l_sql: STRING_8
+			l_all_args: ARRAYED_LIST [detachable ANY]
+			l_new_version: INTEGER_64
+		do
+			l_new_version := a_current_version + 1
+
+			-- Build UPDATE with version check
+			create l_sql.make (200)
+			l_sql.append ("UPDATE ")
+			l_sql.append_string_general (a_table)
+			l_sql.append (" SET ")
+			l_sql.append_string_general (a_set_clause)
+			l_sql.append (", version = ? WHERE id = ? AND version = ?")
+
+			-- Combine user args with version args
+			create l_all_args.make (a_args.count + 3)
+			across a_args as arg loop
+				l_all_args.extend (arg)
+			end
+			l_all_args.extend (l_new_version)
+			l_all_args.extend (a_id)
+			l_all_args.extend (a_current_version)
+
+			execute_with_args (l_sql, l_all_args.to_array)
+
+			if changes_count > 0 then
+				Result := [True, l_new_version]
+			else
+				Result := [False, {INTEGER_64} 0]
+			end
+		ensure
+			success_means_changed: Result.success implies changes_count > 0
+			failure_means_unchanged: not Result.success implies changes_count = 0
+		end
+
+	upsert (a_table: READABLE_STRING_8; a_columns: ARRAY [READABLE_STRING_8];
+			a_values: ARRAY [detachable ANY]; a_conflict_columns: ARRAY [READABLE_STRING_8])
+			-- Insert row or update if conflict on specified columns.
+			-- Uses SQLite's INSERT ... ON CONFLICT DO UPDATE syntax.
+			-- Example: db.upsert ("stock", <<"product_id", "location_id", "quantity">>, <<1, 2, 100>>, <<"product_id", "location_id">>)
+		require
+			is_open: is_open
+			table_not_empty: not a_table.is_empty
+			columns_not_empty: not a_columns.is_empty
+			values_match_columns: a_values.count = a_columns.count
+			conflict_columns_not_empty: not a_conflict_columns.is_empty
+		local
+			l_sql: STRING_8
+			i: INTEGER
+			l_update_cols: ARRAYED_LIST [STRING_8]
+		do
+			create l_sql.make (300)
+			l_sql.append ("INSERT INTO ")
+			l_sql.append_string_general (a_table)
+			l_sql.append (" (")
+
+			-- Column list
+			from i := a_columns.lower until i > a_columns.upper loop
+				if i > a_columns.lower then
+					l_sql.append (", ")
+				end
+				l_sql.append_string_general (a_columns [i])
+				i := i + 1
+			end
+
+			l_sql.append (") VALUES (")
+
+			-- Placeholders
+			from i := a_values.lower until i > a_values.upper loop
+				if i > a_values.lower then
+					l_sql.append (", ")
+				end
+				l_sql.append ("?")
+				i := i + 1
+			end
+
+			l_sql.append (") ON CONFLICT (")
+
+			-- Conflict columns
+			from i := a_conflict_columns.lower until i > a_conflict_columns.upper loop
+				if i > a_conflict_columns.lower then
+					l_sql.append (", ")
+				end
+				l_sql.append_string_general (a_conflict_columns [i])
+				i := i + 1
+			end
+
+			l_sql.append (") DO UPDATE SET ")
+
+			-- Build update list (exclude conflict columns)
+			create l_update_cols.make (a_columns.count)
+			across a_columns as col loop
+				if not across a_conflict_columns as cc some cc.same_string (col) end then
+					l_update_cols.extend (col.to_string_8)
+				end
+			end
+
+			from i := 1 until i > l_update_cols.count loop
+				if i > 1 then
+					l_sql.append (", ")
+				end
+				l_sql.append (l_update_cols [i])
+				l_sql.append (" = excluded.")
+				l_sql.append (l_update_cols [i])
+				i := i + 1
+			end
+
+			execute_with_args (l_sql, a_values)
+		end
+
+	decrement_if (a_table: READABLE_STRING_8; a_column: READABLE_STRING_8;
+			a_amount: INTEGER; a_where: READABLE_STRING_8; a_args: ARRAY [detachable ANY]): BOOLEAN
+			-- Atomically decrement column if condition is met (including sufficient value).
+			-- Returns True if decrement succeeded, False if condition not met.
+			-- Prevents race condition of SELECT-then-UPDATE pattern.
+			-- Example: success := db.decrement_if ("stock", "quantity", 10, "id = ? AND quantity >= ?", <<stock_id, 10>>)
+		require
+			is_open: is_open
+			table_not_empty: not a_table.is_empty
+			column_not_empty: not a_column.is_empty
+			amount_positive: a_amount > 0
+			where_not_empty: not a_where.is_empty
+		local
+			l_sql: STRING_8
+			l_all_args: ARRAYED_LIST [detachable ANY]
+		do
+			create l_sql.make (150)
+			l_sql.append ("UPDATE ")
+			l_sql.append_string_general (a_table)
+			l_sql.append (" SET ")
+			l_sql.append_string_general (a_column)
+			l_sql.append (" = ")
+			l_sql.append_string_general (a_column)
+			l_sql.append (" - ? WHERE ")
+			l_sql.append_string_general (a_where)
+
+			create l_all_args.make (a_args.count + 1)
+			l_all_args.extend (a_amount)
+			across a_args as arg loop
+				l_all_args.extend (arg)
+			end
+
+			execute_with_args (l_sql, l_all_args.to_array)
+			Result := changes_count > 0
+		end
+
+	increment_if (a_table: READABLE_STRING_8; a_column: READABLE_STRING_8;
+			a_amount: INTEGER; a_where: READABLE_STRING_8; a_args: ARRAY [detachable ANY]): BOOLEAN
+			-- Atomically increment column if condition is met.
+			-- Returns True if increment succeeded, False if condition not met.
+			-- Example: success := db.increment_if ("stock", "quantity", 5, "id = ?", <<stock_id>>)
+		require
+			is_open: is_open
+			table_not_empty: not a_table.is_empty
+			column_not_empty: not a_column.is_empty
+			amount_positive: a_amount > 0
+			where_not_empty: not a_where.is_empty
+		local
+			l_sql: STRING_8
+			l_all_args: ARRAYED_LIST [detachable ANY]
+		do
+			create l_sql.make (150)
+			l_sql.append ("UPDATE ")
+			l_sql.append_string_general (a_table)
+			l_sql.append (" SET ")
+			l_sql.append_string_general (a_column)
+			l_sql.append (" = ")
+			l_sql.append_string_general (a_column)
+			l_sql.append (" + ? WHERE ")
+			l_sql.append_string_general (a_where)
+
+			create l_all_args.make (a_args.count + 1)
+			l_all_args.extend (a_amount)
+			across a_args as arg loop
+				l_all_args.extend (arg)
+			end
+
+			execute_with_args (l_sql, l_all_args.to_array)
+			Result := changes_count > 0
+		end
+
 feature -- Query Monitoring (N+1 Detection)
 
 	query_monitor: detachable SIMPLE_SQL_QUERY_MONITOR

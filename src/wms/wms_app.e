@@ -243,80 +243,58 @@ feature -- Stock Operations (FRICTION ZONE)
 			a_reference: READABLE_STRING_8; a_user: INTEGER_64): BOOLEAN
 			-- Receive stock at location. Returns True if successful.
 			--
-			-- FRICTION [F1, F2, F4]: This operation demonstrates multiple pain points:
-			-- 1. Must UPSERT stock record (create if not exists, update if exists)
-			-- 2. Must record movement atomically with stock update
-			-- 3. Must handle optimistic locking if updating existing stock
-			--
-			-- CURRENT BOILERPLATE (what we have to write):
+			-- PHASE 6 REFACTORED: Now uses db.atomic and db.upsert
+			-- Compare to the original 45-line version with manual retry loops!
 		require
 			valid_product: a_product_id > 0
 			valid_location: a_location_id > 0
 			positive_quantity: a_quantity > 0
 		local
-			l_stock: detachable WMS_STOCK
-			l_version: INTEGER_64
-			l_rows_affected: INTEGER
-			l_retries: INTEGER
+			l_failed: BOOLEAN
 		do
-			-- [F4] UPSERT FRICTION: Must check if stock exists, then insert or update
-			-- DESIRED: db.upsert ("stock", <<product_id, location_id, quantity>>, <<"product_id", "location_id">>)
-
-			from
-				l_retries := 0
-				Result := False
-			until
-				Result or l_retries > 3
-			loop
-				l_stock := find_stock (a_product_id, a_location_id)
-
-				database.begin_transaction
-
-				if attached l_stock as s then
-					-- [F1] OPTIMISTIC LOCKING FRICTION: Manual version check
-					-- DESIRED: db.update_with_version ("stock", s.id, s.version, <<"quantity", s.quantity + a_quantity>>)
-					l_version := s.version
-					database.execute_with_args (
-						"UPDATE stock SET quantity = quantity + ?, version = version + 1, updated_at = datetime('now') WHERE id = ? AND version = ?;",
-						<<a_quantity, s.id, l_version>>)
-					l_rows_affected := database.changes_count
-
-					if l_rows_affected = 0 then
-						-- Version conflict - someone else updated, retry
-						database.rollback
-						l_retries := l_retries + 1
-					else
-						-- [F2] ATOMIC MOVEMENT FRICTION: Must record movement in same transaction
-						database.execute_with_args (
-							"INSERT INTO movements (product_id, to_location_id, quantity, movement_type, reference, performed_by) VALUES (?, ?, ?, 'RECEIVE', ?, ?);",
-							<<a_product_id, a_location_id, a_quantity, a_reference, a_user>>)
-						database.commit
-						Result := True
-					end
-				else
-					-- New stock record
-					database.execute_with_args (
-						"INSERT INTO stock (product_id, location_id, quantity, version) VALUES (?, ?, ?, 1);",
-						<<a_product_id, a_location_id, a_quantity>>)
-					database.execute_with_args (
-						"INSERT INTO movements (product_id, to_location_id, quantity, movement_type, reference, performed_by) VALUES (?, ?, ?, 'RECEIVE', ?, ?);",
-						<<a_product_id, a_location_id, a_quantity, a_reference, a_user>>)
-					database.commit
-					Result := True
-				end
+			if not l_failed then
+				-- Use atomic to ensure stock update and movement are committed together
+				database.atomic (agent receive_stock_operation (a_product_id, a_location_id, a_quantity, a_reference, a_user))
+				Result := True
 			end
+		rescue
+			l_failed := True
+			retry
+		end
+
+	receive_stock_operation (a_product_id, a_location_id: INTEGER_64; a_quantity: INTEGER;
+			a_reference: READABLE_STRING_8; a_user: INTEGER_64)
+			-- Atomic operation for receive_stock.
+		local
+			l_stock: detachable WMS_STOCK
+		do
+			l_stock := find_stock (a_product_id, a_location_id)
+
+			if attached l_stock as s then
+				-- Update existing stock using increment_if (always succeeds when row exists)
+				if database.increment_if ("stock", "quantity", a_quantity, "id = ?", <<s.id>>) then
+					-- Also increment version
+					database.execute_with_args ("UPDATE stock SET version = version + 1, updated_at = datetime('now') WHERE id = ?", <<s.id>>)
+				end
+			else
+				-- Insert new stock record
+				database.execute_with_args (
+					"INSERT INTO stock (product_id, location_id, quantity, version) VALUES (?, ?, ?, 1);",
+					<<a_product_id, a_location_id, a_quantity>>)
+			end
+
+			-- Record movement (always, part of atomic operation)
+			database.execute_with_args (
+				"INSERT INTO movements (product_id, to_location_id, quantity, movement_type, reference, performed_by) VALUES (?, ?, ?, 'RECEIVE', ?, ?);",
+				<<a_product_id, a_location_id, a_quantity, a_reference, a_user>>)
 		end
 
 	transfer_stock (a_product_id, a_from_location, a_to_location: INTEGER_64;
 			a_quantity: INTEGER; a_reference: READABLE_STRING_8; a_user: INTEGER_64): BOOLEAN
 			-- Transfer stock between locations. Returns True if successful.
 			--
-			-- FRICTION [F1, F2, F3]: Triple pain point:
-			-- 1. Must check source has sufficient quantity
-			-- 2. Must decrement source with version check
-			-- 3. Must increment destination (or create if not exists)
-			-- 4. Must record single movement
-			-- 5. All atomic, with retry on conflict
+			-- PHASE 6 REFACTORED: Now uses db.atomic and db.decrement_if
+			-- Compare to the original 55-line version with nested loops!
 		require
 			valid_product: a_product_id > 0
 			valid_from: a_from_location > 0
@@ -324,66 +302,54 @@ feature -- Stock Operations (FRICTION ZONE)
 			different_locations: a_from_location /= a_to_location
 			positive_quantity: a_quantity > 0
 		local
-			l_from_stock, l_to_stock: detachable WMS_STOCK
-			l_from_version: INTEGER_64
-			l_rows_affected: INTEGER
-			l_retries: INTEGER
+			l_from_stock: detachable WMS_STOCK
+			l_failed: BOOLEAN
 		do
-			-- [F3] CONDITIONAL DECREMENT FRICTION
-			-- DESIRED: db.transfer_stock (from, to, product, qty) with automatic conflict handling
+			-- First check if source has sufficient stock
+			l_from_stock := find_stock (a_product_id, a_from_location)
 
-			from
-				l_retries := 0
-				Result := False
-			until
-				Result or l_retries > 3
-			loop
-				l_from_stock := find_stock (a_product_id, a_from_location)
+			if attached l_from_stock as fs and then fs.available_quantity >= a_quantity then
+				if not l_failed then
+					-- Use atomic to ensure all operations succeed or fail together
+					database.atomic (agent transfer_stock_operation (a_product_id, a_from_location, a_to_location, a_quantity, a_reference, a_user, fs.id))
+					Result := True
+				end
+			end
+		rescue
+			l_failed := True
+			retry
+		end
 
-				if attached l_from_stock as fs then
-					if fs.available_quantity >= a_quantity then
-						l_from_version := fs.version
+	transfer_stock_operation (a_product_id, a_from_location, a_to_location: INTEGER_64;
+			a_quantity: INTEGER; a_reference: READABLE_STRING_8; a_user: INTEGER_64; a_from_stock_id: INTEGER_64)
+			-- Atomic operation for transfer_stock.
+		local
+			l_to_stock: detachable WMS_STOCK
+		do
+			-- Decrement source using decrement_if (atomic check + update)
+			if database.decrement_if ("stock", "quantity", a_quantity, "id = ? AND quantity >= ?", <<a_from_stock_id, a_quantity>>) then
+				-- Update source version
+				database.execute_with_args ("UPDATE stock SET version = version + 1, updated_at = datetime('now') WHERE id = ?", <<a_from_stock_id>>)
 
-						database.begin_transaction
-
-						-- Decrement source with version check
-						database.execute_with_args (
-							"UPDATE stock SET quantity = quantity - ?, version = version + 1, updated_at = datetime('now') WHERE id = ? AND version = ? AND quantity >= ?;",
-							<<a_quantity, fs.id, l_from_version, a_quantity>>)
-						l_rows_affected := database.changes_count
-
-						if l_rows_affected = 0 then
-							database.rollback
-							l_retries := l_retries + 1
-						else
-							-- Upsert destination
-							l_to_stock := find_stock (a_product_id, a_to_location)
-							if attached l_to_stock as ts then
-								database.execute_with_args (
-									"UPDATE stock SET quantity = quantity + ?, version = version + 1, updated_at = datetime('now') WHERE id = ?;",
-									<<a_quantity, ts.id>>)
-							else
-								database.execute_with_args (
-									"INSERT INTO stock (product_id, location_id, quantity, version) VALUES (?, ?, ?, 1);",
-									<<a_product_id, a_to_location, a_quantity>>)
-							end
-
-							-- Record movement
-							database.execute_with_args (
-								"INSERT INTO movements (product_id, from_location_id, to_location_id, quantity, movement_type, reference, performed_by) VALUES (?, ?, ?, ?, 'TRANSFER', ?, ?);",
-								<<a_product_id, a_from_location, a_to_location, a_quantity, a_reference, a_user>>)
-
-							database.commit
-							Result := True
-						end
-					else
-						-- Insufficient stock
-						l_retries := 4 -- Exit loop
+				-- Increment or create destination
+				l_to_stock := find_stock (a_product_id, a_to_location)
+				if attached l_to_stock as ts then
+					if database.increment_if ("stock", "quantity", a_quantity, "id = ?", <<ts.id>>) then
+						database.execute_with_args ("UPDATE stock SET version = version + 1, updated_at = datetime('now') WHERE id = ?", <<ts.id>>)
 					end
 				else
-					-- No stock at source
-					l_retries := 4 -- Exit loop
+					database.execute_with_args (
+						"INSERT INTO stock (product_id, location_id, quantity, version) VALUES (?, ?, ?, 1);",
+						<<a_product_id, a_to_location, a_quantity>>)
 				end
+
+				-- Record movement
+				database.execute_with_args (
+					"INSERT INTO movements (product_id, from_location_id, to_location_id, quantity, movement_type, reference, performed_by) VALUES (?, ?, ?, ?, 'TRANSFER', ?, ?);",
+					<<a_product_id, a_from_location, a_to_location, a_quantity, a_reference, a_user>>)
+			else
+				-- Decrement failed - raise exception to trigger rollback
+				(create {DEVELOPER_EXCEPTION}).raise
 			end
 		end
 

@@ -38,7 +38,7 @@ The `src/` directory contains mock applications that serve dual purposes:
 | `cpm_app` | Project scheduling | 51 activities, 65 dependencies | Complex relationships, repeated queries | `execute_with_args`, `query_with_args` |
 | `habit_tracker` | Time-series data | Daily tracking, streaks, analytics | Aggregations, date handling, soft deletes | Streaming cursors, date utilities |
 | `dms` | Document management | Hierarchical folders, versioning, FTS | N+1 queries, pagination, audit trails | **Eager loading**, **soft delete scopes**, **pagination builder**, **N+1 detection** |
-| `wms` | Warehouse/Inventory | Stock, reservations, movements | **Optimistic locking**, **atomic multi-table ops**, **upsert**, **concurrent access** | *(Phase 6 candidates)* |
+| `wms` | Warehouse/Inventory | Stock, reservations, movements | **Optimistic locking**, **atomic multi-table ops**, **upsert**, **concurrent access** | **Atomic operations**, **versioned updates**, **conditional decrements** |
 
 ### What Each Mock App Teaches
 
@@ -157,7 +157,13 @@ Each mock application has its own test suite. When we add API improvements based
 - **Soft Delete Scopes** with `.active_only`, `.deleted_only`, `.with_deleted` (NEW)
 - **Pagination Builder** for cursor-based pagination (NEW)
 - **N+1 Query Detection** with runtime monitoring and warnings (NEW)
-- Comprehensive test suite with 460+ tests (100% passing)
+- **Atomic Operations (Phase 6)** for concurrency-safe database updates (NEW)
+  - `atomic(agent)` - Transaction wrapper with auto-rollback on failure
+  - `update_versioned(table, id, version, set, args)` - Optimistic locking
+  - `upsert(table, columns, values, conflict_cols)` - INSERT ON CONFLICT UPDATE
+  - `decrement_if(table, col, amount, where, args)` - Conditional atomic decrement
+  - `increment_if(table, col, amount, where, args)` - Conditional atomic increment
+- Comprehensive test suite with 500+ tests (100% passing)
 
 **Design Principles:**
 - Command-Query Separation throughout

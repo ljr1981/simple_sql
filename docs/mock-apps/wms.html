@@ -11,7 +11,7 @@
         <nav class="sidebar">
             <div class="sidebar-header">
                 <h1>SIMPLE_SQL</h1>
-                <span class="version">v1.2 - 485+ Tests</span>
+                <span class="version">v1.3 - 500+ Tests</span>
             </div>
 
             <div class="nav-section">
@@ -50,7 +50,7 @@
             </div>
 
             <h1>Warehouse Management System (WMS)</h1>
-            <p>A warehouse/inventory management mock application demonstrating concurrency patterns, optimistic locking, and atomic multi-table operations. This mock exposes friction points that will drive Phase 6 API improvements.</p>
+            <p>A warehouse/inventory management mock application demonstrating concurrency patterns, optimistic locking, and atomic multi-table operations. This mock exposed friction points that drove the <strong>Phase 6 API improvements</strong>, now fully implemented.</p>
 
             <div class="mock-app-card">
                 <h3>WMS Statistics</h3>
@@ -69,7 +69,7 @@
                     </div>
                     <div class="stat">
                         <div class="stat-value">Phase 6</div>
-                        <div class="stat-label">Drives Roadmap</div>
+                        <div class="stat-label">Implemented</div>
                     </div>
                 </div>
             </div>
@@ -218,15 +218,52 @@ GROUP BY p.id
 HAVING total_qty < p.min_stock_level
 ORDER BY (p.min_stock_level - total_qty) DESC</code></pre>
 
-            <h2>Future: Phase 6 Improvements</h2>
-            <p>The friction points identified by WMS will drive these Phase 6 API additions:</p>
-            <ul>
-                <li><code>db.update_versioned()</code> - Optimistic locking with automatic retry</li>
-                <li><code>db.atomic(agent)</code> - Transaction wrapper with conflict retry</li>
-                <li><code>db.upsert()</code> - Insert or update in single operation</li>
-                <li><code>db.upsert_batch()</code> - Bulk upsert for efficiency</li>
-                <li><code>db.decrement_if()</code> / <code>db.increment_if()</code> - Conditional updates</li>
-            </ul>
+            <h2>Phase 6 Implementation (Complete)</h2>
+            <p>The friction points identified by WMS drove these Phase 6 API additions, now fully implemented:</p>
+
+            <div class="callout success">
+                <div class="callout-title">Implemented APIs</div>
+                <ul>
+                    <li><code>db.atomic(agent)</code> - Transaction wrapper with auto-rollback on failure</li>
+                    <li><code>db.update_versioned(table, id, version, set, args)</code> - Optimistic locking</li>
+                    <li><code>db.upsert(table, columns, values, conflict_cols)</code> - INSERT ON CONFLICT UPDATE</li>
+                    <li><code>db.decrement_if(table, col, amount, where, args)</code> - Conditional atomic decrement</li>
+                    <li><code>db.increment_if(table, col, amount, where, args)</code> - Conditional atomic increment</li>
+                </ul>
+            </div>
+
+            <h3>Before vs After: receive_stock</h3>
+            <p>The Phase 6 APIs dramatically reduce boilerplate:</p>
+            <pre><code class="eiffel"><span class="comment">-- BEFORE: 45 lines with manual retry loops</span>
+<span class="keyword">from</span> l_retries := 0 <span class="keyword">until</span> Result <span class="keyword">or</span> l_retries > 3 <span class="keyword">loop</span>
+    l_stock := find_stock (product_id, location_id)
+    database.begin_transaction
+    <span class="comment">-- ... 35 more lines of version checking and rollback handling</span>
+<span class="keyword">end</span>
+
+<span class="comment">-- AFTER: Clean, readable, safe</span>
+database.atomic (agent receive_stock_operation (product_id, location_id, qty, ref, user))
+
+receive_stock_operation (...)
+    <span class="keyword">do</span>
+        <span class="keyword">if</span> database.increment_if (<span class="string">"stock"</span>, <span class="string">"quantity"</span>, qty, <span class="string">"id = ?"</span>, &lt;&lt;stock_id&gt;&gt;) <span class="keyword">then</span>
+            <span class="comment">-- Record movement</span>
+        <span class="keyword">end</span>
+    <span class="keyword">end</span></code></pre>
+
+            <h3>Before vs After: transfer_stock</h3>
+            <pre><code class="eiffel"><span class="comment">-- BEFORE: 55 lines with nested loops and manual version checks</span>
+
+<span class="comment">-- AFTER: Uses decrement_if for atomic "check and decrement"</span>
+<span class="keyword">if</span> database.decrement_if (<span class="string">"stock"</span>, <span class="string">"quantity"</span>, qty,
+        <span class="string">"id = ? AND quantity >= ?"</span>, &lt;&lt;from_id, qty&gt;&gt;) <span class="keyword">then</span>
+    <span class="comment">-- Increment destination, record movement</span>
+<span class="keyword">end</span></code></pre>
+
+            <div class="callout tip">
+                <div class="callout-title">Mock-Driven Development Success</div>
+                <p>The WMS mock app perfectly demonstrates the power of mock-driven development. Real friction from building a realistic application drove API improvements that benefit all users, not just hypothetical features.</p>
+            </div>
         </main>
     </div>
 </body>
