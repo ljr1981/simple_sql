@@ -6,7 +6,7 @@ A production-quality, easy-to-use wrapper around the Eiffel SQLite3 library, pro
 
 ## Features
 
-### ✅ Implemented (v0.9)
+### ✅ Implemented (v1.0)
 
 **Core Database Operations:**
 - Simple database creation (file-based and in-memory)
@@ -95,8 +95,9 @@ A production-quality, easy-to-use wrapper around the Eiffel SQLite3 library, pro
 - **BLOB Handling** with file I/O, hex encoding, and named parameter binding
 - **Automatic Audit/Change Tracking** with trigger-based change capture and JSON storage
 - **Repository Pattern** with generic CRUD operations, find_all, find_by_id, find_where, pagination
-- **Vector Embeddings** for ML/AI with similarity search, K-nearest neighbors, cosine/Euclidean distance (NEW)
-- Comprehensive test suite with 272 tests (100% passing)
+- **Vector Embeddings** for ML/AI with similarity search, K-nearest neighbors, cosine/Euclidean distance
+- **Online Backup API** with progress callbacks, incremental backup, export/import (CSV, JSON, SQL) (NEW)
+- Comprehensive test suite with 284 tests (100% passing)
 
 **Design Principles:**
 - Command-Query Separation throughout
@@ -1004,7 +1005,34 @@ SIMPLE_SQL_PRAGMA_CONFIG      -- Configuration
 
 SIMPLE_SQL_BACKUP             -- Backup utilities
     ├── copy_memory_to_file()
-    └── copy_file_to_memory()
+    ├── copy_file_to_memory()
+    ├── online_backup()        -- Factory: SIMPLE_SQL_ONLINE_BACKUP
+    ├── exporter()             -- Factory: SIMPLE_SQL_EXPORT
+    └── importer()             -- Factory: SIMPLE_SQL_IMPORT
+
+SIMPLE_SQL_ONLINE_BACKUP      -- SQLite Online Backup API (NEW)
+    ├── execute()              -- Complete backup
+    ├── execute_incremental()  -- Pages at a time
+    ├── set_progress_callback()-- Progress notifications
+    ├── progress_percentage()  -- Current progress
+    └── close()                -- Release resources
+
+SIMPLE_SQL_EXPORT             -- Export to formats (NEW)
+    ├── table_to_csv()         -- Export table to CSV file
+    ├── table_csv_string()     -- Export table to CSV string
+    ├── table_to_json()        -- Export table to JSON file
+    ├── table_json_string()    -- Export table to JSON string
+    ├── table_to_sql()         -- Export table to SQL file
+    ├── table_sql_string()     -- Export table to SQL string
+    └── database_sql_string()  -- Export entire database
+
+SIMPLE_SQL_IMPORT             -- Import from formats (NEW)
+    ├── csv_to_table()         -- Import CSV file
+    ├── csv_string_to_table()  -- Import CSV string
+    ├── json_to_table()        -- Import JSON file
+    ├── json_string_to_table() -- Import JSON string
+    ├── sql_file()             -- Execute SQL dump file
+    └── sql_string()           -- Execute SQL statements
 
 SIMPLE_SQL_FTS5               -- Full-text search (NEW)
     ├── is_fts5_available()    -- Runtime detection
@@ -1088,10 +1116,11 @@ Comprehensive test suite using EiffelStudio AutoTest framework:
 - `TEST_SIMPLE_SQL_REPOSITORY` - Repository pattern (23 tests)
 - `TEST_SIMPLE_SQL_SCHEMA` - Schema introspection (11 tests)
 - `TEST_SIMPLE_SQL_STREAMING` - Result streaming (19 tests)
-- `TEST_SIMPLE_SQL_VECTOR` - Vector embeddings (22 tests) ✅ NEW
+- `TEST_SIMPLE_SQL_VECTOR` - Vector embeddings (22 tests)
+- `TEST_SIMPLE_SQL_ADVANCED_BACKUP` - Online backup, export/import (12 tests) ✅ NEW
 - `TEST_BLOB_DEBUG` - Debug utilities (1 test)
 
-**Total: 272 tests (100% passing)**
+**Total: 284 tests (100% passing)**
 
 All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolated execution.
 
@@ -1189,7 +1218,7 @@ All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolate
 - Bulk update and delete operations
 - Save (insert-or-update) semantics
 
-### ✅ Phase 5: Specialized Features (PARTIALLY COMPLETE)
+### ✅ Phase 5: Specialized Features (COMPLETE)
 
 **Vector Embeddings** ✅
 - `SIMPLE_SQL_VECTOR` - Vector representation with math operations
@@ -1201,10 +1230,12 @@ All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolate
 - BLOB serialization (IEEE 754 double-precision)
 - Metadata storage (JSON) for each vector
 
-**Advanced Backup** (Future)
-- Online backup API
-- Incremental backup
-- Export/import formats (CSV, JSON, SQL dump)
+**Advanced Backup** ✅
+- `SIMPLE_SQL_ONLINE_BACKUP` - SQLite Online Backup API with progress callbacks
+- Incremental backup with configurable pages per step
+- `SIMPLE_SQL_EXPORT` - Export to CSV, JSON, SQL dump formats
+- `SIMPLE_SQL_IMPORT` - Import from CSV, JSON, SQL formats
+- Round-trip data integrity (export then import)
 
 ### Phase 6: Enterprise Features (Future)
 
@@ -1273,10 +1304,10 @@ Contributions welcome! Please ensure:
 
 ## Status
 
-**Current Version:** 0.9
-**Stability:** Beta - Core API stable
-**Production Ready:** Phases 1-4 complete, Phase 5 partially complete. Core features, FTS5 full-text search, BLOB handling, JSON1 extension, audit tracking, repository pattern, and vector embeddings all production-ready.
-**Test Coverage:** 272 tests (100% passing)
+**Current Version:** 1.0
+**Stability:** Production - Core API stable
+**Production Ready:** Phases 1-5 complete. All features production-ready: core CRUD, prepared statements, PRAGMA configuration, batch operations, fluent query builder, schema introspection, migrations, streaming, FTS5 full-text search, BLOB handling, JSON1 extension, audit tracking, repository pattern, vector embeddings, online backup, and export/import.
+**Test Coverage:** 284 tests (100% passing)
 **SQLite Version:** 3.51.1 (via eiffel_sqlite_2025 v1.0.0)
 
 ---
