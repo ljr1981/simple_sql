@@ -387,8 +387,10 @@ feature {NONE} -- CSV Parsing
 
 	build_insert_sql (a_table: READABLE_STRING_GENERAL; a_headers: detachable ARRAYED_LIST [STRING_32]; a_values: ARRAYED_LIST [STRING_32]): STRING_32
 			-- Build INSERT statement from values
+			-- Detects "blob:HEXDATA" values and converts to X'HEXDATA' syntax
 		local
 			l_first: BOOLEAN
+			l_value: STRING_32
 		do
 			create Result.make (200)
 			Result.append ("INSERT INTO ")
@@ -414,9 +416,18 @@ feature {NONE} -- CSV Parsing
 					Result.append (", ")
 				end
 				l_first := False
-				Result.append_character ('%'')
-				Result.append (escape_sql_string (ic.to_string_8).to_string_32)
-				Result.append_character ('%'')
+				l_value := ic
+				if l_value.starts_with ("blob:") then
+					-- BLOB encoded value: convert to SQLite hex literal
+					Result.append ("X'")
+					Result.append (l_value.substring (6, l_value.count))
+					Result.append_character ('%'')
+				else
+					-- Regular string value
+					Result.append_character ('%'')
+					Result.append (escape_sql_string (l_value.to_string_8).to_string_32)
+					Result.append_character ('%'')
+				end
 			end
 			Result.append (")")
 		end

@@ -426,6 +426,195 @@ INSERT INTO test VALUES (2, 'two');
 			l_db2.close
 		end
 
+feature -- BLOB Round-Trip Tests
+
+	test_export_import_blob_sql
+			-- Test SQL export/import with BLOB data
+		note
+			testing: "covers/{SIMPLE_SQL_EXPORT}.format_sql_value"
+			testing: "covers/{SIMPLE_SQL_IMPORT}.sql_string"
+		local
+			l_db1, l_db2: SIMPLE_SQL_DATABASE
+			l_export: SIMPLE_SQL_EXPORT
+			l_import: SIMPLE_SQL_IMPORT
+			l_sql: STRING_32
+			l_result: SIMPLE_SQL_RESULT
+			l_stmt: SIMPLE_SQL_PREPARED_STATEMENT
+			l_blob: MANAGED_POINTER
+			l_retrieved_blob: detachable MANAGED_POINTER
+		do
+			-- Create source database with BLOB
+			create l_db1.make_memory
+			l_db1.execute ("CREATE TABLE files (id INTEGER, name TEXT, data BLOB)")
+
+			-- Insert test BLOB data: bytes 0x01, 0x02, 0x03, 0x04
+			create l_blob.make (4)
+			l_blob.put_natural_8 (1, 0)
+			l_blob.put_natural_8 (2, 1)
+			l_blob.put_natural_8 (3, 2)
+			l_blob.put_natural_8 (4, 3)
+
+			l_stmt := l_db1.prepare ("INSERT INTO files (id, name, data) VALUES (?, ?, ?)")
+			l_stmt.bind_integer (1, 1)
+			l_stmt.bind_text (2, "test.bin")
+			l_stmt.bind_blob (3, l_blob)
+			l_stmt.execute
+
+			-- Export to SQL
+			l_export := backup_helper.exporter (l_db1)
+			l_sql := l_export.table_sql_string ("files")
+			l_db1.close
+
+			-- Verify SQL contains hex-encoded BLOB
+			assert_string_contains ("has_hex_blob", l_sql, "X'01020304'")
+
+			-- Import into new database
+			create l_db2.make_memory
+			l_import := backup_helper.importer (l_db2)
+			l_import.sql_string (l_sql.to_string_8)
+
+			assert_false ("import_no_error", l_import.had_error)
+
+			-- Verify BLOB data was preserved
+			l_result := l_db2.query ("SELECT data FROM files WHERE id = 1")
+			assert_false ("has_result", l_result.rows.is_empty)
+
+			l_retrieved_blob := l_result.first.blob_value ("data")
+			assert_true ("blob_retrieved", l_retrieved_blob /= Void)
+			if attached l_retrieved_blob as l_rb then
+				assert_equal ("blob_size", 4, l_rb.count)
+				assert_equal ("byte_1", 1, l_rb.read_natural_8 (0).to_integer_32)
+				assert_equal ("byte_2", 2, l_rb.read_natural_8 (1).to_integer_32)
+				assert_equal ("byte_3", 3, l_rb.read_natural_8 (2).to_integer_32)
+				assert_equal ("byte_4", 4, l_rb.read_natural_8 (3).to_integer_32)
+			end
+
+			l_db2.close
+		end
+
+	test_export_csv_with_blob
+			-- Test CSV export includes BLOB as hex-encoded string
+		note
+			testing: "covers/{SIMPLE_SQL_EXPORT}.format_csv_value"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_export: SIMPLE_SQL_EXPORT
+			l_csv: STRING_32
+			l_stmt: SIMPLE_SQL_PREPARED_STATEMENT
+			l_blob: MANAGED_POINTER
+		do
+			-- Create database with BLOB
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE blobs (id INTEGER, data BLOB)")
+
+			-- Insert test BLOB: 0xAB, 0xCD
+			create l_blob.make (2)
+			l_blob.put_natural_8 (0xAB, 0)
+			l_blob.put_natural_8 (0xCD, 1)
+
+			l_stmt := l_db.prepare ("INSERT INTO blobs (id, data) VALUES (?, ?)")
+			l_stmt.bind_integer (1, 1)
+			l_stmt.bind_blob (2, l_blob)
+			l_stmt.execute
+
+			-- Export to CSV
+			l_export := backup_helper.exporter (l_db)
+			l_csv := l_export.table_csv_string ("blobs")
+			l_db.close
+
+			-- Verify CSV contains blob: prefix with hex data
+			assert_string_contains ("has_blob_prefix", l_csv, "blob:ABCD")
+		end
+
+	test_import_csv_with_blob
+			-- Test CSV import decodes blob: prefix
+		note
+			testing: "covers/{SIMPLE_SQL_IMPORT}.build_insert_sql"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_import: SIMPLE_SQL_IMPORT
+			l_csv: STRING_8
+			l_result: SIMPLE_SQL_RESULT
+			l_blob: detachable MANAGED_POINTER
+		do
+			-- Create database
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE blobs (id TEXT, data BLOB)")
+
+			-- CSV with blob: encoded data (0xDE, 0xAD, 0xBE, 0xEF)
+			l_csv := "id,data%N1,blob:DEADBEEF"
+
+			l_import := backup_helper.importer (l_db)
+			l_import.csv_string_to_table (l_csv, "blobs")
+
+			assert_false ("no_error", l_import.had_error)
+			assert_equal ("rows_imported", 1, l_import.rows_imported)
+
+			-- Verify BLOB was correctly decoded
+			l_result := l_db.query ("SELECT data FROM blobs WHERE id = '1'")
+			assert_false ("has_result", l_result.rows.is_empty)
+
+			l_blob := l_result.first.blob_value ("data")
+			assert_true ("blob_retrieved", l_blob /= Void)
+			if attached l_blob as lb then
+				assert_equal ("blob_size", 4, lb.count)
+				assert_equal ("byte_1", 0xDE, lb.read_natural_8 (0).to_integer_32)
+				assert_equal ("byte_2", 0xAD, lb.read_natural_8 (1).to_integer_32)
+				assert_equal ("byte_3", 0xBE, lb.read_natural_8 (2).to_integer_32)
+				assert_equal ("byte_4", 0xEF, lb.read_natural_8 (3).to_integer_32)
+			end
+
+			l_db.close
+		end
+
+	test_backup_copy_with_blob
+			-- Test simple copy preserves BLOB data
+		note
+			testing: "covers/{SIMPLE_SQL_BACKUP}.copy_table_data"
+		local
+			l_mem_db: SIMPLE_SQL_DATABASE
+			l_file_db: SIMPLE_SQL_DATABASE
+			l_stmt: SIMPLE_SQL_PREPARED_STATEMENT
+			l_blob: MANAGED_POINTER
+			l_result: SIMPLE_SQL_RESULT
+			l_retrieved: detachable MANAGED_POINTER
+		do
+			-- Create memory database with BLOB
+			create l_mem_db.make_memory
+			l_mem_db.execute ("CREATE TABLE bindata (id INTEGER, content BLOB)")
+
+			-- Insert test BLOB: 0x11, 0x22, 0x33
+			create l_blob.make (3)
+			l_blob.put_natural_8 (0x11, 0)
+			l_blob.put_natural_8 (0x22, 1)
+			l_blob.put_natural_8 (0x33, 2)
+
+			l_stmt := l_mem_db.prepare ("INSERT INTO bindata (id, content) VALUES (?, ?)")
+			l_stmt.bind_integer (1, 1)
+			l_stmt.bind_blob (2, l_blob)
+			l_stmt.execute
+
+			-- Copy to file
+			backup_helper.copy_memory_to_file (l_mem_db, Test_db_file)
+			l_mem_db.close
+
+			-- Open file and verify BLOB
+			create l_file_db.make_read_only (Test_db_file)
+			l_result := l_file_db.query ("SELECT content FROM bindata WHERE id = 1")
+			assert_false ("has_result", l_result.rows.is_empty)
+
+			l_retrieved := l_result.first.blob_value ("content")
+			assert_true ("blob_retrieved", l_retrieved /= Void)
+			if attached l_retrieved as lr then
+				assert_equal ("blob_size", 3, lr.count)
+				assert_equal ("byte_1", 0x11, lr.read_natural_8 (0).to_integer_32)
+				assert_equal ("byte_2", 0x22, lr.read_natural_8 (1).to_integer_32)
+				assert_equal ("byte_3", 0x33, lr.read_natural_8 (2).to_integer_32)
+			end
+
+			l_file_db.close
+		end
+
 feature {NONE} -- Progress Callback
 
 	progress_callback_count: INTEGER

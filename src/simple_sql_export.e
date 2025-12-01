@@ -446,6 +446,7 @@ feature {NONE} -- CSV Implementation
 
 	format_csv_value (a_row: SIMPLE_SQL_ROW; a_index: INTEGER): STRING_32
 			-- Format row value for CSV output
+			-- BLOBs are encoded as "blob:HEXDATA" for later identification
 		local
 			l_col_name: STRING_32
 		do
@@ -457,6 +458,11 @@ feature {NONE} -- CSV Implementation
 				create Result.make_from_string (l_int.out)
 			elseif attached {REAL_64} a_row [a_index] as l_real then
 				create Result.make_from_string (l_real.out)
+			elseif attached {MANAGED_POINTER} a_row [a_index] as l_blob then
+				-- Encode BLOB as "blob:HEXDATA" for CSV
+				create Result.make (l_blob.count * 2 + 10)
+				Result.append ("blob:")
+				Result.append (blob_to_hex (l_blob))
 			elseif attached {READABLE_STRING_GENERAL} a_row [a_index] as l_string then
 				Result := escape_csv_value (l_string)
 			else
@@ -489,6 +495,7 @@ feature {NONE} -- JSON Implementation
 
 	format_json_value (a_row: SIMPLE_SQL_ROW; a_index: INTEGER): STRING_32
 			-- Format row value for JSON output
+			-- BLOBs are encoded as {"$blob": "HEXDATA"} object for later identification
 		local
 			l_col_name: STRING_32
 		do
@@ -500,6 +507,12 @@ feature {NONE} -- JSON Implementation
 				create Result.make_from_string (l_int.out)
 			elseif attached {REAL_64} a_row [a_index] as l_real then
 				create Result.make_from_string (l_real.out)
+			elseif attached {MANAGED_POINTER} a_row [a_index] as l_blob then
+				-- Encode BLOB as JSON object with $blob marker
+				create Result.make (l_blob.count * 2 + 20)
+				Result.append ("{%"$blob%": %"")
+				Result.append (blob_to_hex (l_blob))
+				Result.append ("%"}")
 			elseif attached {READABLE_STRING_GENERAL} a_row [a_index] as l_string then
 				create Result.make (l_string.count + 10)
 				Result.append_character ('"')
@@ -533,6 +546,7 @@ feature {NONE} -- SQL Implementation
 
 	format_sql_value (a_row: SIMPLE_SQL_ROW; a_index: INTEGER): STRING_32
 			-- Format row value for SQL INSERT statement
+			-- BLOBs are encoded using SQLite X'HEXDATA' syntax
 		local
 			l_col_name: STRING_32
 		do
@@ -544,6 +558,12 @@ feature {NONE} -- SQL Implementation
 				create Result.make_from_string (l_int.out)
 			elseif attached {REAL_64} a_row [a_index] as l_real then
 				create Result.make_from_string (l_real.out)
+			elseif attached {MANAGED_POINTER} a_row [a_index] as l_blob then
+				-- Encode BLOB using SQLite hex literal syntax: X'...'
+				create Result.make (l_blob.count * 2 + 4)
+				Result.append ("X'")
+				Result.append (blob_to_hex (l_blob))
+				Result.append_character ('%'')
 			elseif attached {READABLE_STRING_GENERAL} a_row [a_index] as l_string then
 				create Result.make (l_string.count + 10)
 				Result.append_character ('%'')
@@ -552,6 +572,55 @@ feature {NONE} -- SQL Implementation
 			else
 				Result := "NULL"
 			end
+		end
+
+feature {NONE} -- BLOB Encoding
+
+	blob_to_hex (a_blob: MANAGED_POINTER): STRING_32
+			-- Convert BLOB to uppercase hexadecimal string
+		local
+			i: INTEGER
+			l_byte: NATURAL_8
+		do
+			create Result.make (a_blob.count * 2)
+			from i := 0 until i >= a_blob.count loop
+				l_byte := a_blob.read_natural_8 (i)
+				Result.append (byte_to_hex (l_byte))
+				i := i + 1
+			end
+		ensure
+			correct_length: Result.count = a_blob.count * 2
+		end
+
+	byte_to_hex (a_byte: NATURAL_8): STRING_32
+			-- Convert single byte to two hex characters (uppercase)
+		local
+			l_high, l_low: NATURAL_8
+		do
+			create Result.make (2)
+			l_high := a_byte |>> 4
+			l_low := a_byte & 0x0F
+			Result.append_character (hex_char (l_high))
+			Result.append_character (hex_char (l_low))
+		ensure
+			two_chars: Result.count = 2
+		end
+
+	hex_char (a_nibble: NATURAL_8): CHARACTER_32
+			-- Convert nibble (0-15) to hex character
+		require
+			valid_nibble: a_nibble <= 15
+		local
+			l_code: NATURAL_32
+		do
+			if a_nibble < 10 then
+				l_code := ('0').code.to_natural_32 + a_nibble.to_natural_32
+			else
+				l_code := ('A').code.to_natural_32 + (a_nibble - 10).to_natural_32
+			end
+			Result := l_code.to_character_32
+		ensure
+			valid_hex: ("0123456789ABCDEF").has (Result.to_character_8)
 		end
 
 note

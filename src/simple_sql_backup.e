@@ -163,6 +163,7 @@ feature {NONE} -- Implementation
 
 	copy_table_data (a_source, a_destination: SIMPLE_SQL_DATABASE; a_table_name: STRING_32)
 			-- Copy all data from source table to destination table
+			-- Handles BLOB data using SQLite X'HEXDATA' syntax
 		require
 			source_attached: a_source /= Void
 			destination_attached: a_destination /= Void
@@ -199,6 +200,11 @@ feature {NONE} -- Implementation
 						l_insert_sql.append (al_int.out)
 					elseif attached {REAL_64} l_row [i] as al_real then
 						l_insert_sql.append (al_real.out)
+					elseif attached {MANAGED_POINTER} l_row [i] as al_blob then
+						-- BLOB: encode using SQLite hex literal X'...'
+						l_insert_sql.append ("X'")
+						l_insert_sql.append (blob_to_hex (al_blob))
+						l_insert_sql.append_character ('%'')
 					elseif attached {READABLE_STRING_GENERAL} l_row [i] as al_string then
 						l_insert_sql.append_character ('%'')
 						l_insert_sql.append (escape_string (al_string))
@@ -236,6 +242,53 @@ feature {NONE} -- Implementation
 				end
 				i := i + 1
 			end
+		end
+
+	blob_to_hex (a_blob: MANAGED_POINTER): STRING_32
+			-- Convert BLOB to uppercase hexadecimal string
+		local
+			i: INTEGER
+			l_byte: NATURAL_8
+		do
+			create Result.make (a_blob.count * 2)
+			from i := 0 until i >= a_blob.count loop
+				l_byte := a_blob.read_natural_8 (i)
+				Result.append (byte_to_hex (l_byte))
+				i := i + 1
+			end
+		ensure
+			correct_length: Result.count = a_blob.count * 2
+		end
+
+	byte_to_hex (a_byte: NATURAL_8): STRING_32
+			-- Convert single byte to two hex characters (uppercase)
+		local
+			l_high, l_low: NATURAL_8
+		do
+			create Result.make (2)
+			l_high := a_byte |>> 4
+			l_low := a_byte & 0x0F
+			Result.append_character (hex_char (l_high))
+			Result.append_character (hex_char (l_low))
+		ensure
+			two_chars: Result.count = 2
+		end
+
+	hex_char (a_nibble: NATURAL_8): CHARACTER_32
+			-- Convert nibble (0-15) to hex character
+		require
+			valid_nibble: a_nibble <= 15
+		local
+			l_code: NATURAL_32
+		do
+			if a_nibble < 10 then
+				l_code := ('0').code.to_natural_32 + a_nibble.to_natural_32
+			else
+				l_code := ('A').code.to_natural_32 + (a_nibble - 10).to_natural_32
+			end
+			Result := l_code.to_character_32
+		ensure
+			valid_hex: ("0123456789ABCDEF").has (Result.to_character_8)
 		end
 
 note
