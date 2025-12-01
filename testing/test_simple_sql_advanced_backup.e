@@ -1,0 +1,469 @@
+note
+	description: "Test online backup, export, and import operations"
+	testing: "type/manual"
+	testing: "execution/serial"
+
+class
+	TEST_SIMPLE_SQL_ADVANCED_BACKUP
+
+inherit
+	TEST_SET_BASE
+		redefine
+			on_prepare,
+			on_clean
+		end
+
+feature {NONE} -- Events
+
+	on_prepare
+			-- Setup before each test
+		local
+			l_file: RAW_FILE
+		do
+			Precursor
+			create backup_helper
+
+			-- Clean up any leftover test files
+			across << Test_db_file, Test_db_file_2, Test_csv_file, Test_json_file, Test_sql_file >> as ic loop
+				create l_file.make_with_name (ic)
+				if l_file.exists then
+					l_file.delete
+				end
+			end
+		end
+
+	on_clean
+			-- Cleanup after each test
+		local
+			l_file: RAW_FILE
+		do
+			-- Remove test files
+			across << Test_db_file, Test_db_file_2, Test_csv_file, Test_json_file, Test_sql_file >> as ic loop
+				create l_file.make_with_name (ic)
+				if l_file.exists then
+					l_file.delete
+				end
+			end
+			Precursor
+		end
+
+feature -- Online Backup Tests
+
+	test_online_backup_complete
+			-- Test online backup to file
+		note
+			testing: "covers/{SIMPLE_SQL_ONLINE_BACKUP}.execute"
+		local
+			l_source: SIMPLE_SQL_DATABASE
+			l_dest_db: SIMPLE_SQL_DATABASE
+			l_backup: SIMPLE_SQL_ONLINE_BACKUP
+			l_result: SIMPLE_SQL_RESULT
+		do
+			-- Create and populate source database
+			create l_source.make_memory
+			l_source.execute ("CREATE TABLE users (id INTEGER, name TEXT)")
+			l_source.execute ("INSERT INTO users VALUES (1, 'Alice')")
+			l_source.execute ("INSERT INTO users VALUES (2, 'Bob')")
+
+			-- Perform online backup
+			l_backup := backup_helper.online_backup_to_file (l_source, Test_db_file)
+			l_backup.execute
+
+			assert_true ("backup_complete", l_backup.is_complete)
+			assert_false ("no_error", l_backup.had_error)
+
+			l_backup.close
+			l_source.close
+
+			-- Verify destination database
+			create l_dest_db.make_read_only (Test_db_file)
+			l_result := l_dest_db.query ("SELECT COUNT(*) as cnt FROM users")
+			assert_equal ("count_two", 2, l_result.first.integer_value ("cnt"))
+			l_dest_db.close
+		end
+
+	test_online_backup_with_progress
+			-- Test online backup with progress callback
+		note
+			testing: "covers/{SIMPLE_SQL_ONLINE_BACKUP}.execute_incremental"
+			testing: "covers/{SIMPLE_SQL_ONLINE_BACKUP}.set_progress_callback"
+		local
+			l_source: SIMPLE_SQL_DATABASE
+			l_backup: SIMPLE_SQL_ONLINE_BACKUP
+		do
+			progress_callback_count := 0
+
+			-- Create source database with some data
+			create l_source.make_memory
+			l_source.execute ("CREATE TABLE data (id INTEGER, value TEXT)")
+			across 1 |..| 100 as i loop
+				l_source.execute ("INSERT INTO data VALUES (" + i.out + ", 'test value')")
+			end
+
+			-- Perform incremental backup with progress callback
+			l_backup := backup_helper.online_backup_to_file (l_source, Test_db_file)
+			l_backup.set_pages_per_step (10)
+			l_backup.set_progress_callback (agent on_backup_progress)
+			l_backup.execute_incremental
+
+			assert_true ("backup_complete", l_backup.is_complete)
+			assert_true ("progress_reported", progress_callback_count > 0)
+
+			l_backup.close
+			l_source.close
+		end
+
+	test_online_backup_progress_percentage
+			-- Test backup progress percentage calculation
+		note
+			testing: "covers/{SIMPLE_SQL_ONLINE_BACKUP}.progress_percentage"
+		local
+			l_source: SIMPLE_SQL_DATABASE
+			l_backup: SIMPLE_SQL_ONLINE_BACKUP
+		do
+			create l_source.make_memory
+			l_source.execute ("CREATE TABLE test (id INTEGER)")
+
+			l_backup := backup_helper.online_backup_to_file (l_source, Test_db_file)
+			l_backup.execute
+
+			-- After completion, progress should be 100%
+			assert_reals_equal ("complete", 100.0, l_backup.progress_percentage, 0.01)
+
+			l_backup.close
+			l_source.close
+		end
+
+feature -- Export Tests
+
+	test_export_csv_table
+			-- Test exporting table to CSV
+		note
+			testing: "covers/{SIMPLE_SQL_EXPORT}.table_to_csv"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_export: SIMPLE_SQL_EXPORT
+			l_file: PLAIN_TEXT_FILE
+			l_content: STRING_8
+		do
+			-- Create database
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE users (id INTEGER, name TEXT, email TEXT)")
+			l_db.execute ("INSERT INTO users VALUES (1, 'Alice', 'alice@test.com')")
+			l_db.execute ("INSERT INTO users VALUES (2, 'Bob', 'bob@test.com')")
+
+			-- Export to CSV
+			l_export := backup_helper.exporter (l_db)
+			l_export.table_to_csv ("users", Test_csv_file)
+			l_db.close
+
+			-- Read and verify CSV content
+			create l_file.make_open_read (Test_csv_file)
+			create l_content.make (l_file.count)
+			l_file.read_stream (l_file.count)
+			l_content.append (l_file.last_string)
+			l_file.close
+
+			assert_string_contains ("has_header", l_content, "id,name,email")
+			assert_string_contains ("has_alice", l_content, "Alice")
+			assert_string_contains ("has_bob", l_content, "Bob")
+		end
+
+	test_export_csv_string
+			-- Test getting CSV as string
+		note
+			testing: "covers/{SIMPLE_SQL_EXPORT}.table_csv_string"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_export: SIMPLE_SQL_EXPORT
+			l_csv: STRING_32
+		do
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE products (name TEXT, price REAL)")
+			l_db.execute ("INSERT INTO products VALUES ('Widget', 9.99)")
+
+			l_export := backup_helper.exporter (l_db)
+			l_csv := l_export.table_csv_string ("products")
+			l_db.close
+
+			assert_string_contains ("has_name", l_csv, "name")
+			assert_string_contains ("has_widget", l_csv, "Widget")
+			assert_string_contains ("has_price", l_csv, "9.99")
+		end
+
+	test_export_json_table
+			-- Test exporting table to JSON
+		note
+			testing: "covers/{SIMPLE_SQL_EXPORT}.table_to_json"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_export: SIMPLE_SQL_EXPORT
+			l_file: PLAIN_TEXT_FILE
+			l_content: STRING_8
+		do
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE users (id INTEGER, name TEXT)")
+			l_db.execute ("INSERT INTO users VALUES (1, 'Alice')")
+			l_db.execute ("INSERT INTO users VALUES (2, 'Bob')")
+
+			l_export := backup_helper.exporter (l_db)
+			l_export.table_to_json ("users", Test_json_file)
+			l_db.close
+
+			create l_file.make_open_read (Test_json_file)
+			create l_content.make (l_file.count)
+			l_file.read_stream (l_file.count)
+			l_content.append (l_file.last_string)
+			l_file.close
+
+			assert_string_contains ("is_array", l_content, "[")
+			assert_string_contains ("has_id", l_content, "%"id%":")
+			assert_string_contains ("has_name", l_content, "%"name%":")
+			assert_string_contains ("has_alice", l_content, "Alice")
+		end
+
+	test_export_json_string
+			-- Test getting JSON as string
+		note
+			testing: "covers/{SIMPLE_SQL_EXPORT}.table_json_string"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_export: SIMPLE_SQL_EXPORT
+			l_json: STRING_32
+		do
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE items (id INTEGER, value INTEGER)")
+			l_db.execute ("INSERT INTO items VALUES (1, 100)")
+
+			l_export := backup_helper.exporter (l_db)
+			l_json := l_export.table_json_string ("items")
+			l_db.close
+
+			assert_string_contains ("has_open_bracket", l_json, "[")
+			assert_string_contains ("has_close_bracket", l_json, "]")
+			assert_string_contains ("has_id", l_json, "%"id%": 1")
+			assert_string_contains ("has_value", l_json, "%"value%": 100")
+		end
+
+	test_export_sql_table
+			-- Test exporting table to SQL
+		note
+			testing: "covers/{SIMPLE_SQL_EXPORT}.table_to_sql"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_export: SIMPLE_SQL_EXPORT
+			l_file: PLAIN_TEXT_FILE
+			l_content: STRING_8
+		do
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE test (id INTEGER, name TEXT)")
+			l_db.execute ("INSERT INTO test VALUES (1, 'data')")
+
+			l_export := backup_helper.exporter (l_db)
+			l_export.table_to_sql ("test", Test_sql_file)
+			l_db.close
+
+			create l_file.make_open_read (Test_sql_file)
+			create l_content.make (l_file.count)
+			l_file.read_stream (l_file.count)
+			l_content.append (l_file.last_string)
+			l_file.close
+
+			assert_string_contains ("has_create", l_content, "CREATE TABLE")
+			assert_string_contains ("has_insert", l_content, "INSERT INTO test")
+		end
+
+	test_export_database_sql
+			-- Test exporting entire database to SQL
+		note
+			testing: "covers/{SIMPLE_SQL_EXPORT}.database_to_sql"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_export: SIMPLE_SQL_EXPORT
+			l_sql: STRING_32
+		do
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE t1 (a INTEGER)")
+			l_db.execute ("CREATE TABLE t2 (b TEXT)")
+			l_db.execute ("INSERT INTO t1 VALUES (1)")
+			l_db.execute ("INSERT INTO t2 VALUES ('x')")
+
+			l_export := backup_helper.exporter (l_db)
+			l_sql := l_export.database_sql_string
+			l_db.close
+
+			assert_string_contains ("has_begin", l_sql, "BEGIN TRANSACTION")
+			assert_string_contains ("has_commit", l_sql, "COMMIT")
+			assert_string_contains ("has_t1", l_sql, "Table: t1")
+			assert_string_contains ("has_t2", l_sql, "Table: t2")
+		end
+
+feature -- Import Tests
+
+	test_import_csv
+			-- Test importing CSV into table
+		note
+			testing: "covers/{SIMPLE_SQL_IMPORT}.csv_string_to_table"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_import: SIMPLE_SQL_IMPORT
+			l_result: SIMPLE_SQL_RESULT
+			l_csv: STRING_8
+		do
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE users (id TEXT, name TEXT, email TEXT)")
+
+			l_csv := "id,name,email%N1,Alice,alice@test.com%N2,Bob,bob@test.com"
+
+			l_import := backup_helper.importer (l_db)
+			l_import.csv_string_to_table (l_csv, "users")
+
+			assert_false ("no_error", l_import.had_error)
+			assert_equal ("rows_imported", 2, l_import.rows_imported)
+
+			l_result := l_db.query ("SELECT COUNT(*) as cnt FROM users")
+			assert_equal ("count_two", 2, l_result.first.integer_value ("cnt"))
+
+			l_db.close
+		end
+
+	test_import_json
+			-- Test importing JSON into table
+		note
+			testing: "covers/{SIMPLE_SQL_IMPORT}.json_string_to_table"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_import: SIMPLE_SQL_IMPORT
+			l_result: SIMPLE_SQL_RESULT
+			l_json: STRING_8
+		do
+			create l_db.make_memory
+			l_db.execute ("CREATE TABLE items (id INTEGER, name TEXT)")
+
+			l_json := "[{%"id%": 1, %"name%": %"Widget%"}, {%"id%": 2, %"name%": %"Gadget%"}]"
+
+			l_import := backup_helper.importer (l_db)
+			l_import.json_string_to_table (l_json, "items")
+
+			assert_false ("no_error", l_import.had_error)
+
+			l_result := l_db.query ("SELECT COUNT(*) as cnt FROM items")
+			assert_equal ("count_two", 2, l_result.first.integer_value ("cnt"))
+
+			l_result := l_db.query ("SELECT name FROM items WHERE id = 1")
+			assert_strings_equal ("widget_name", "Widget", l_result.first.string_value ("name"))
+
+			l_db.close
+		end
+
+	test_import_sql
+			-- Test importing SQL dump
+		note
+			testing: "covers/{SIMPLE_SQL_IMPORT}.sql_string"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_import: SIMPLE_SQL_IMPORT
+			l_result: SIMPLE_SQL_RESULT
+			l_sql: STRING_8
+		do
+			create l_db.make_memory
+
+			l_sql := "[
+CREATE TABLE test (id INTEGER, value TEXT);
+INSERT INTO test VALUES (1, 'one');
+INSERT INTO test VALUES (2, 'two');
+			]"
+
+			l_import := backup_helper.importer (l_db)
+			l_import.sql_string (l_sql)
+
+			assert_false ("no_error", l_import.had_error)
+
+			l_result := l_db.query ("SELECT COUNT(*) as cnt FROM test")
+			assert_equal ("count_two", 2, l_result.first.integer_value ("cnt"))
+
+			l_db.close
+		end
+
+	test_export_import_round_trip
+			-- Test export to SQL then import back
+		note
+			testing: "covers/{SIMPLE_SQL_EXPORT}.database_sql_string"
+			testing: "covers/{SIMPLE_SQL_IMPORT}.sql_string"
+		local
+			l_db1, l_db2: SIMPLE_SQL_DATABASE
+			l_export: SIMPLE_SQL_EXPORT
+			l_import: SIMPLE_SQL_IMPORT
+			l_sql: STRING_32
+			l_result: SIMPLE_SQL_RESULT
+		do
+			-- Create source database
+			create l_db1.make_memory
+			l_db1.execute ("CREATE TABLE data (id INTEGER, value TEXT)")
+			l_db1.execute ("INSERT INTO data VALUES (1, 'first')")
+			l_db1.execute ("INSERT INTO data VALUES (2, 'second')")
+
+			-- Export to SQL
+			l_export := backup_helper.exporter (l_db1)
+			l_sql := l_export.database_sql_string
+			l_db1.close
+
+			-- Import into new database
+			create l_db2.make_memory
+			l_import := backup_helper.importer (l_db2)
+			l_import.sql_string (l_sql.to_string_8)
+
+			assert_false ("import_no_error", l_import.had_error)
+
+			-- Verify round trip
+			l_result := l_db2.query ("SELECT COUNT(*) as cnt FROM data")
+			assert_equal ("row_count", 2, l_result.first.integer_value ("cnt"))
+
+			l_result := l_db2.query ("SELECT value FROM data WHERE id = 1")
+			assert_false ("has_result", l_result.rows.is_empty)
+			assert_strings_equal ("first_value", "first", l_result.first.string_value ("value"))
+
+			l_db2.close
+		end
+
+feature {NONE} -- Progress Callback
+
+	progress_callback_count: INTEGER
+			-- Count of progress callback invocations
+
+	on_backup_progress (a_remaining, a_total: INTEGER)
+			-- Handle backup progress
+		do
+			progress_callback_count := progress_callback_count + 1
+		end
+
+feature {NONE} -- Implementation
+
+	backup_helper: SIMPLE_SQL_BACKUP
+			-- Backup helper instance
+
+feature {NONE} -- Constants
+
+	Test_db_file: STRING_8 = "test_advanced_backup.db"
+			-- Test database file name
+
+	Test_db_file_2: STRING_8 = "test_advanced_backup_2.db"
+			-- Second test database file name
+
+	Test_csv_file: STRING_8 = "test_export.csv"
+			-- Test CSV export file
+
+	Test_json_file: STRING_8 = "test_export.json"
+			-- Test JSON export file
+
+	Test_sql_file: STRING_8 = "test_export.sql"
+			-- Test SQL export file
+
+note
+	copyright: "Copyright (c) 2025, Larry Rix"
+	license: "MIT License"
+	source: "[
+		SIMPLE_SQL - High-level SQLite API for Eiffel
+	]"
+
+end

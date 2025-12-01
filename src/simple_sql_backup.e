@@ -1,15 +1,102 @@
-note
+﻿note
 	description: "[
 		Utilities for backing up SQLite databases between memory and filesystem.
-		Provides simple copy operations without relying on experimental backup API.
+
+		Features:
+			- Simple copy operations (SQL-based)
+			- Online backup using SQLite Backup API (via online_backup)
+			- Export to CSV, JSON, SQL formats (via exporter)
+			- Import from CSV, JSON, SQL formats (via importer)
+
+		Usage:
+			backup := create {SIMPLE_SQL_BACKUP}
+
+			-- Simple copy (SQL-based)
+			backup.copy_memory_to_file (memory_db, "backup.db")
+			backup.copy_file_to_memory ("source.db", memory_db)
+
+			-- Online backup with progress
+			online := backup.online_backup (source_db, dest_db)
+			online.set_progress_callback (agent on_progress)
+			online.execute_incremental
+
+			-- Export
+			exp := backup.exporter (db)
+			exp.database_to_sql ("dump.sql")
+
+			-- Import
+			imp := backup.importer (db)
+			imp.sql_file ("dump.sql")
 	]"
-	date: "$Date$"
-	revision: "$Revision$"
+	date: "$"
+	revision: "$"
 
 class
 	SIMPLE_SQL_BACKUP
 
-feature -- Operations
+feature -- Factory Methods
+
+	online_backup (a_source, a_destination: SIMPLE_SQL_DATABASE): SIMPLE_SQL_ONLINE_BACKUP
+			-- Create online backup operation from source to destination
+		require
+			source_attached: a_source /= Void
+			source_open: a_source.is_open
+			destination_attached: a_destination /= Void
+			destination_open: a_destination.is_open
+		do
+			create Result.make (a_source, a_destination)
+		ensure
+			result_attached: Result /= Void
+		end
+
+	online_backup_to_file (a_source: SIMPLE_SQL_DATABASE; a_destination_path: READABLE_STRING_GENERAL): SIMPLE_SQL_ONLINE_BACKUP
+			-- Create online backup from source to new file
+		require
+			source_attached: a_source /= Void
+			source_open: a_source.is_open
+			path_not_empty: not a_destination_path.is_empty
+		do
+			create Result.make_to_file (a_source, a_destination_path)
+		ensure
+			result_attached: Result /= Void
+		end
+
+	online_backup_from_file (a_source_path: READABLE_STRING_GENERAL; a_destination: SIMPLE_SQL_DATABASE): SIMPLE_SQL_ONLINE_BACKUP
+			-- Create online backup from file to destination
+		require
+			path_not_empty: not a_source_path.is_empty
+			file_exists: (create {RAW_FILE}.make_with_name (a_source_path)).exists
+			destination_attached: a_destination /= Void
+			destination_open: a_destination.is_open
+		do
+			create Result.make_from_file (a_source_path, a_destination)
+		ensure
+			result_attached: Result /= Void
+		end
+
+	exporter (a_database: SIMPLE_SQL_DATABASE): SIMPLE_SQL_EXPORT
+			-- Create exporter for CSV, JSON, SQL export
+		require
+			database_attached: a_database /= Void
+			database_open: a_database.is_open
+		do
+			create Result.make (a_database)
+		ensure
+			result_attached: Result /= Void
+		end
+
+	importer (a_database: SIMPLE_SQL_DATABASE): SIMPLE_SQL_IMPORT
+			-- Create importer for CSV, JSON, SQL import
+		require
+			database_attached: a_database /= Void
+			database_open: a_database.is_open
+		do
+			create Result.make (a_database)
+		ensure
+			result_attached: Result /= Void
+		end
+
+feature -- Simple Copy Operations
 
 	copy_memory_to_file (a_memory_db: SIMPLE_SQL_DATABASE; a_file_name: READABLE_STRING_GENERAL)
 			-- Copy in-memory database to file
@@ -23,7 +110,7 @@ feature -- Operations
 			l_tables: SIMPLE_SQL_RESULT
 		do
 			create l_file_db.make (a_file_name)
-			
+
 			-- Copy schema
 			l_schema := a_memory_db.query ("SELECT sql FROM sqlite_master WHERE type='table' AND sql NOT NULL")
 			across l_schema.rows as ic loop
@@ -31,13 +118,13 @@ feature -- Operations
 					l_file_db.execute (al_sql.to_string_8)
 				end
 			end
-			
+
 			-- Copy data for each table
 			l_tables := a_memory_db.query ("SELECT name FROM sqlite_master WHERE type='table'")
 			across l_tables.rows as ic loop
 				copy_table_data (a_memory_db, l_file_db, ic.string_value ("name"))
 			end
-			
+
 			l_file_db.close
 		end
 
@@ -54,7 +141,7 @@ feature -- Operations
 			l_tables: SIMPLE_SQL_RESULT
 		do
 			create l_file_db.make_read_only (a_file_name)
-			
+
 			-- Copy schema
 			l_schema := l_file_db.query ("SELECT sql FROM sqlite_master WHERE type='table' AND sql NOT NULL")
 			across l_schema.rows as ic loop
@@ -62,13 +149,13 @@ feature -- Operations
 					a_memory_db.execute (al_sql.to_string_8)
 				end
 			end
-			
+
 			-- Copy data for each table
 			l_tables := l_file_db.query ("SELECT name FROM sqlite_master WHERE type='table'")
 			across l_tables.rows as ic loop
 				copy_table_data (l_file_db, a_memory_db, ic.string_value ("name"))
 			end
-			
+
 			l_file_db.close
 		end
 
@@ -88,15 +175,15 @@ feature {NONE} -- Implementation
 		do
 			create l_insert_sql.make_from_string ("SELECT * FROM ")
 			l_insert_sql.append (a_table_name)
-			
+
 			l_result := a_source.query (l_insert_sql.to_string_8)
-			
+
 			across l_result.rows as ic_row loop
 				l_row := ic_row
 				create l_insert_sql.make_from_string ("INSERT INTO ")
 				l_insert_sql.append (a_table_name)
 				l_insert_sql.append (" VALUES (")
-				
+
 				from
 					i := 1
 				until
@@ -105,7 +192,7 @@ feature {NONE} -- Implementation
 					if i > 1 then
 						l_insert_sql.append (", ")
 					end
-					
+
 					if l_row.is_null (l_row.column_name (i)) then
 						l_insert_sql.append ("NULL")
 					elseif attached {INTEGER_64} l_row [i] as al_int then
@@ -119,10 +206,10 @@ feature {NONE} -- Implementation
 					else
 						l_insert_sql.append ("NULL")
 					end
-					
+
 					i := i + 1
 				end
-				
+
 				l_insert_sql.append (")")
 				a_destination.execute (l_insert_sql.to_string_8)
 			end

@@ -31,7 +31,7 @@ Before ending, update:
 
 ## Current State
 
-**Phases 1-4 Complete. Phase 5 Partially Complete.** The library now includes:
+**Phases 1-5 Complete.** The library now includes:
 - **SIMPLE_SQL_DATABASE**: Full CRUD, transactions, streaming, error handling, BLOB utilities
 - **SIMPLE_SQL_RESULT/ROW**: Query results with typed accessors, BLOB support
 - **SIMPLE_SQL_CURSOR**: Lazy row-by-row iteration
@@ -42,18 +42,21 @@ Before ending, update:
 - **SIMPLE_SQL_MIGRATION_RUNNER**: Version-controlled migrations
 - **SIMPLE_SQL_PRAGMA_CONFIG**: Database configuration
 - **SIMPLE_SQL_BATCH**: Bulk operations
-- **SIMPLE_SQL_BACKUP**: Memory/file database copying
+- **SIMPLE_SQL_BACKUP**: Memory/file database copying, online backup, export/import
 - **SIMPLE_SQL_ERROR**: Structured error handling
 - **SIMPLE_SQL_FTS5**: Full-text search with BM25 ranking
 - **SIMPLE_SQL_FTS5_QUERY**: Fluent FTS5 query builder
 - **SIMPLE_SQL_JSON**: JSON1 extension with validation, path queries, modification, aggregation
 - **SIMPLE_SQL_AUDIT**: Automatic audit/change tracking with trigger generation
 - **SIMPLE_SQL_REPOSITORY**: Generic repository pattern with CRUD operations
-- **SIMPLE_SQL_VECTOR**: Vector embeddings with math operations (NEW)
-- **SIMPLE_SQL_VECTOR_STORE**: Vector storage with KNN search (NEW)
-- **SIMPLE_SQL_SIMILARITY**: Distance and similarity metrics (NEW)
+- **SIMPLE_SQL_VECTOR**: Vector embeddings with math operations
+- **SIMPLE_SQL_VECTOR_STORE**: Vector storage with KNN search
+- **SIMPLE_SQL_SIMILARITY**: Distance and similarity metrics
+- **SIMPLE_SQL_ONLINE_BACKUP**: SQLite Online Backup API with progress callbacks (NEW)
+- **SIMPLE_SQL_EXPORT**: Export to CSV, JSON, SQL dump formats (NEW)
+- **SIMPLE_SQL_IMPORT**: Import from CSV, JSON, SQL formats (NEW)
 
-**272 tests (100% passing). Production-ready for all Phase 1-4 features plus Vector Embeddings.**
+**284 tests (100% passing). Production-ready for all Phase 1-5 features.**
 
 ---
 
@@ -94,12 +97,12 @@ Before ending, update:
 | **Audit/Change Tracking** | Auto-generate triggers, change log table, JSON diff logging, change history queries | ✅ |
 | **Repository Pattern** | Generic repository with find_all, find_by_id, find_where, pagination, CRUD operations | ✅ |
 
-### Phase 5 - Specialized ✅ PARTIALLY COMPLETE
+### Phase 5 - Specialized ✅ COMPLETE
 
 | Feature | Description | Status |
 |---------|-------------|--------|
 | **Vector Embeddings** | Store REAL_64 arrays, cosine similarity, K-nearest neighbors | ✅ |
-| **Advanced Backup** | Online backup API, incremental backup, export/import formats | 📋 Next |
+| **Advanced Backup** | Online backup API with progress callbacks, incremental backup, export/import (CSV, JSON, SQL) | ✅ |
 
 ---
 
@@ -147,9 +150,10 @@ SIMPLE_SQL_CURSOR (lazy iteration) ✅ NEW
 
 SIMPLE_SQL_RESULT_STREAM (callback streaming) ✅ NEW
 
-SIMPLE_SQL_BACKUP (enhanced)
-+-- SIMPLE_SQL_EXPORT
-+-- SIMPLE_SQL_IMPORT
+SIMPLE_SQL_BACKUP (enhanced) ✅ IMPLEMENTED
++-- SIMPLE_SQL_ONLINE_BACKUP ✅ IMPLEMENTED
++-- SIMPLE_SQL_EXPORT ✅ IMPLEMENTED
++-- SIMPLE_SQL_IMPORT ✅ IMPLEMENTED
 ```
 
 ---
