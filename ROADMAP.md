@@ -48,6 +48,7 @@ SIMPLE_SQL is developed using **Mock-Driven Development** - building realistic c
 | `cpm_app` | Project scheduling | 51 activities, 65 dependencies | Parameterized queries | `execute_with_args`, `query_with_args` |
 | `habit_tracker` | Time-series data | Daily tracking, streaks | Aggregations, soft deletes | Streaming cursors, date utilities |
 | `dms` | Document management | Hierarchical folders, versioning, FTS, audit | **N+1 queries, pagination, boilerplate** | **Eager loading, soft delete scopes, pagination builder, N+1 detection** |
+| `wms` | Warehouse/Inventory | Stock management, reservations, movements | **Optimistic locking, atomic operations, upsert, concurrent access** | **Phase 6 candidates** |
 
 ### The Process
 
@@ -71,17 +72,18 @@ SIMPLE_SQL is developed using **Mock-Driven Development** - building realistic c
 
 **DMS:** The N+1 problem is real and insidious. Cursor-based pagination is complex to implement correctly. Soft delete boilerplate clutters every query. Audit trails need trigger-based approach.
 
+**WMS:** Optimistic locking requires manual version check + retry loop boilerplate. Atomic multi-table operations (stock + movement audit) need transaction scaffolding. Upsert pattern (receive to existing location) is awkward. Concurrent reservation access has race condition potential. These friction points drive Phase 6 improvements.
+
 ### Potential Future Mocks
 
 - **Reporting Dashboard** - Complex aggregations, window functions, exports
-- **Inventory System** - Stock movements, audit trail queries, concurrent updates
 - **Chat Application** - Real-time patterns, message threading, read receipts
 
 ---
 
 ## Current State
 
-**Phases 1-5 Complete + DMS-Driven Improvements.** The library now includes:
+**Phases 1-5 Complete + DMS-Driven + WMS-Driven Improvements.** The library now includes:
 - **SIMPLE_SQL_DATABASE**: Full CRUD, transactions, streaming, error handling, BLOB utilities, query monitoring
 - **SIMPLE_SQL_RESULT/ROW**: Query results with typed accessors, BLOB support
 - **SIMPLE_SQL_CURSOR**: Lazy row-by-row iteration
@@ -112,7 +114,7 @@ SIMPLE_SQL is developed using **Mock-Driven Development** - building realistic c
 - **SIMPLE_SQL_PAGE**: Pagination result with cursor management (NEW)
 - **SIMPLE_SQL_QUERY_MONITOR**: N+1 query detection and warnings (NEW)
 
-**460+ tests (100% passing). Production-ready for all features. 4 mock applications demonstrate real-world usage.**
+**485+ tests (100% passing). Production-ready for all features. 5 mock applications demonstrate real-world usage.**
 
 Test expansion complete based on Grok code review (see `D:/prod/reference_docs/eiffel/SIMPLE_SQL_TEST_EXPANSION_PLAN.md`):
 - ✅ Priority 1: Backup/Import/Export Edge Cases (8 tests)
@@ -171,6 +173,24 @@ Test expansion complete based on Grok code review (see `D:/prod/reference_docs/e
 |---------|-------------|--------|
 | **Vector Embeddings** | Store REAL_64 arrays, cosine similarity, K-nearest neighbors | ✅ |
 | **Advanced Backup** | Online backup API with progress callbacks, incremental backup, export/import (CSV, JSON, SQL) | ✅ |
+
+### Phase 6 - Concurrency & Atomic Operations (WMS-Driven) 🔜 NEXT
+
+Friction points identified by the WMS (Warehouse Management System) mock application:
+
+| Feature | Friction ID | Current Pain | Proposed API |
+|---------|-------------|--------------|--------------|
+| **Optimistic Locking** | F1 | Manual version check + retry loop (15+ lines) | `db.update_versioned(table, id, version, changes)` |
+| **Atomic Operations** | F2 | `begin_transaction` + multiple executes + manual rollback | `db.atomic(agent)` with auto-retry |
+| **Upsert Pattern** | F4 | Check exists, then INSERT or UPDATE | `db.upsert(table, data, conflict_columns)` |
+| **Conditional Decrement** | F3 | SELECT then UPDATE (race condition!) | `db.decrement_if(table, col, amount, condition)` |
+| **Batch Upsert** | F4+ | Loop with individual upserts | `db.upsert_batch(table, rows, conflict_columns)` |
+
+**Implementation Notes:**
+- Optimistic locking returns success/conflict enum, supports configurable retry count
+- `atomic(agent)` wraps agent in transaction with automatic retry on conflict
+- Upsert uses SQLite's `INSERT ... ON CONFLICT DO UPDATE` syntax
+- Conditional decrement/increment return boolean success
 
 ---
 
@@ -260,7 +280,7 @@ docs/
 ├── css/style.css           -- Professional styling
 ├── api/                    -- API reference for all major classes
 ├── tutorials/              -- How-to guides (soft deletes, eager loading, pagination)
-└── mock-apps/              -- Documentation for all 4 mock applications
+└── mock-apps/              -- Documentation for all 5 mock applications
 ```
 
 **Key Features:**

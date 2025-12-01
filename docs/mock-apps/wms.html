@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WMS Mock App - SIMPLE_SQL</title>
+    <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+    <div class="container">
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h1>SIMPLE_SQL</h1>
+                <span class="version">v1.2 - 485+ Tests</span>
+            </div>
+
+            <div class="nav-section">
+                <h3>Getting Started</h3>
+                <ul>
+                    <li><a href="../index.html">Overview</a></li>
+                    <li><a href="../getting-started.html">Quick Start</a></li>
+                </ul>
+            </div>
+
+            <div class="nav-section">
+                <h3>Mock Applications</h3>
+                <ul>
+                    <li><a href="todo.html">TODO App</a></li>
+                    <li><a href="cpm.html">CPM Scheduler</a></li>
+                    <li><a href="habit-tracker.html">Habit Tracker</a></li>
+                    <li><a href="dms.html">Document Management</a></li>
+                    <li><a href="wms.html" class="active">Warehouse Management</a></li>
+                </ul>
+            </div>
+
+            <div class="nav-section">
+                <h3>Friction Exposed</h3>
+                <ul>
+                    <li>Optimistic Locking (F1)</li>
+                    <li>Atomic Operations (F2)</li>
+                    <li>Conditional Updates (F3)</li>
+                    <li>Upsert Pattern (F4)</li>
+                </ul>
+            </div>
+        </nav>
+
+        <main class="main-content">
+            <div class="breadcrumbs">
+                <a href="../index.html">Home</a> <span>›</span> <a href="../index.html#mock-apps">Mock Apps</a> <span>›</span> Warehouse Management System
+            </div>
+
+            <h1>Warehouse Management System (WMS)</h1>
+            <p>A warehouse/inventory management mock application demonstrating concurrency patterns, optimistic locking, and atomic multi-table operations. This mock exposes friction points that will drive Phase 6 API improvements.</p>
+
+            <div class="mock-app-card">
+                <h3>WMS Statistics</h3>
+                <div class="stats">
+                    <div class="stat">
+                        <div class="stat-value">25</div>
+                        <div class="stat-label">Tests</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">6</div>
+                        <div class="stat-label">Tables</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">6</div>
+                        <div class="stat-label">Friction Points</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">Phase 6</div>
+                        <div class="stat-label">Drives Roadmap</div>
+                    </div>
+                </div>
+            </div>
+
+            <h2>Domain Overview</h2>
+            <p>The WMS implements a realistic warehouse inventory system with:</p>
+            <ul>
+                <li><strong>Warehouses</strong> - Multiple physical warehouse locations</li>
+                <li><strong>Products</strong> - SKU/item definitions with minimum stock levels</li>
+                <li><strong>Locations</strong> - Bin/shelf locations (aisle-rack-shelf-bin)</li>
+                <li><strong>Stock</strong> - Current quantities with <em>version columns</em> for optimistic locking</li>
+                <li><strong>Movements</strong> - Audit trail for all stock changes (receive, transfer, pick, adjust)</li>
+                <li><strong>Reservations</strong> - Time-expiring holds on stock for pending orders</li>
+            </ul>
+
+            <h2>Schema</h2>
+            <pre><code>-- Core tables
+warehouses (id, code, name, address, is_active, created_at)
+products (id, sku, name, description, unit_of_measure, min_stock_level, deleted_at)
+locations (id, warehouse_id, code, aisle, rack, shelf, bin, is_active)
+
+-- Inventory tracking
+stock (id, product_id, location_id, quantity, reserved_quantity,
+       version,  -- Optimistic locking!
+       updated_at)
+
+-- Audit trail
+movements (id, product_id, from_location_id, to_location_id, quantity,
+           movement_type, reference, performed_by, created_at)
+
+-- Reservations with expiry
+reservations (id, product_id, location_id, quantity, order_reference,
+              reserved_by, expires_at, created_at)</code></pre>
+
+            <h2>Friction Points Exposed</h2>
+            <p>The WMS application exposed critical API gaps around concurrent access and atomic operations:</p>
+
+            <div class="friction-card">
+                <h3>F1: Optimistic Locking</h3>
+                <p><strong>Problem:</strong> Stock updates require version checking to prevent lost updates from concurrent access.</p>
+                <p><strong>Current Boilerplate:</strong></p>
+                <pre><code>from l_retries := 0 until Result or l_retries > 3 loop
+    l_stock := find_stock (product_id, location_id)
+    if attached l_stock as s then
+        l_version := s.version
+        database.begin_transaction
+        database.execute_with_args (
+            "UPDATE stock SET quantity = quantity + ?, version = version + 1 WHERE id = ? AND version = ?",
+            <<qty, s.id, l_version>>)
+        if database.changes_count = 0 then
+            database.rollback
+            l_retries := l_retries + 1
+        else
+            database.commit
+            Result := True
+        end
+    end
+end</code></pre>
+                <p><strong>Desired API:</strong></p>
+                <pre><code>Result := db.update_versioned ("stock", stock_id, current_version,
+    agent (b: SIMPLE_SQL_UPDATE_BUILDER) do
+        b.set ("quantity", new_quantity)
+    end)</code></pre>
+            </div>
+
+            <div class="friction-card">
+                <h3>F2: Atomic Multi-Table Operations</h3>
+                <p><strong>Problem:</strong> Every stock change must also record a movement (audit trail). Both must succeed or both fail.</p>
+                <p><strong>Current Boilerplate:</strong> Manual transaction with multiple executes and rollback handling.</p>
+                <p><strong>Desired API:</strong></p>
+                <pre><code>db.atomic (agent receive_stock_operation (product, location, qty, reference))</code></pre>
+            </div>
+
+            <div class="friction-card">
+                <h3>F3: Conditional Decrement</h3>
+                <p><strong>Problem:</strong> Transfer stock only if source has sufficient quantity. SELECT-then-UPDATE creates race condition.</p>
+                <p><strong>Desired API:</strong></p>
+                <pre><code>success := db.decrement_if ("stock", "quantity", 10, "id = ? AND quantity >= ?", <<stock_id, 10>>)</code></pre>
+            </div>
+
+            <div class="friction-card">
+                <h3>F4: Upsert Pattern</h3>
+                <p><strong>Problem:</strong> Receiving stock to existing location should update; to new location should insert.</p>
+                <p><strong>Current Boilerplate:</strong> Check if exists, then INSERT or UPDATE.</p>
+                <p><strong>Desired API:</strong></p>
+                <pre><code>db.upsert ("stock",
+    <<product_id, location_id, quantity>>,
+    <<"product_id", "location_id">>)  -- conflict columns</code></pre>
+            </div>
+
+            <div class="friction-card">
+                <h3>F5: Expiry Cleanup</h3>
+                <p><strong>Problem:</strong> Expired reservations need periodic cleanup with stock release.</p>
+                <p><strong>Desired API:</strong></p>
+                <pre><code>db.cleanup_expired ("reservations", "expires_at", agent release_reservation_callback)</code></pre>
+            </div>
+
+            <div class="friction-card">
+                <h3>F6: Reservation Race Condition</h3>
+                <p><strong>Problem:</strong> Two users check availability simultaneously, both try to reserve same stock.</p>
+                <p><strong>Solution:</strong> Version check in reservation creation handles this, but API could be cleaner.</p>
+            </div>
+
+            <h2>Source Code</h2>
+            <ul>
+                <li><a class="eis-link" href="eiffel:?class=WMS_APP">WMS_APP</a> - Main application facade</li>
+                <li><a class="eis-link" href="eiffel:?class=WMS_WAREHOUSE">WMS_WAREHOUSE</a> - Warehouse entity</li>
+                <li><a class="eis-link" href="eiffel:?class=WMS_PRODUCT">WMS_PRODUCT</a> - Product/SKU entity</li>
+                <li><a class="eis-link" href="eiffel:?class=WMS_LOCATION">WMS_LOCATION</a> - Bin/shelf location</li>
+                <li><a class="eis-link" href="eiffel:?class=WMS_STOCK">WMS_STOCK</a> - Stock level with version column</li>
+                <li><a class="eis-link" href="eiffel:?class=WMS_MOVEMENT">WMS_MOVEMENT</a> - Movement audit record</li>
+                <li><a class="eis-link" href="eiffel:?class=WMS_RESERVATION">WMS_RESERVATION</a> - Time-expiring reservation</li>
+            </ul>
+
+            <h2>Test Coverage</h2>
+            <ul>
+                <li><strong>TEST_WMS_APP</strong> - 17 core tests (CRUD, reservations, movements)</li>
+                <li><strong>TEST_WMS_STRESS</strong> - 8 stress tests (optimistic locking, bulk operations)</li>
+            </ul>
+
+            <h2>Key Patterns Demonstrated</h2>
+
+            <h3>Optimistic Locking with Version Column</h3>
+            <pre><code>-- WMS_STOCK has a version column
+-- Every update increments version and checks old version
+UPDATE stock
+SET quantity = quantity + ?, version = version + 1, updated_at = datetime('now')
+WHERE id = ? AND version = ?
+
+-- If changes_count = 0, someone else modified the row - retry!</code></pre>
+
+            <h3>Atomic Stock + Movement in Transaction</h3>
+            <pre><code>database.begin_transaction
+-- Update stock
+database.execute_with_args (update_sql, stock_args)
+-- Record movement
+database.execute_with_args (movement_sql, movement_args)
+database.commit</code></pre>
+
+            <h3>Low Stock Alerts with Aggregation</h3>
+            <pre><code>SELECT p.*, COALESCE(SUM(s.quantity), 0) as total_qty
+FROM products p
+LEFT JOIN stock s ON s.product_id = p.id
+WHERE p.deleted_at IS NULL AND p.min_stock_level > 0
+GROUP BY p.id
+HAVING total_qty < p.min_stock_level
+ORDER BY (p.min_stock_level - total_qty) DESC</code></pre>
+
+            <h2>Future: Phase 6 Improvements</h2>
+            <p>The friction points identified by WMS will drive these Phase 6 API additions:</p>
+            <ul>
+                <li><code>db.update_versioned()</code> - Optimistic locking with automatic retry</li>
+                <li><code>db.atomic(agent)</code> - Transaction wrapper with conflict retry</li>
+                <li><code>db.upsert()</code> - Insert or update in single operation</li>
+                <li><code>db.upsert_batch()</code> - Bulk upsert for efficiency</li>
+                <li><code>db.decrement_if()</code> / <code>db.increment_if()</code> - Conditional updates</li>
+            </ul>
+        </main>
+    </div>
+</body>
+</html>

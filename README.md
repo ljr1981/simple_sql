@@ -38,6 +38,7 @@ The `src/` directory contains mock applications that serve dual purposes:
 | `cpm_app` | Project scheduling | 51 activities, 65 dependencies | Complex relationships, repeated queries | `execute_with_args`, `query_with_args` |
 | `habit_tracker` | Time-series data | Daily tracking, streaks, analytics | Aggregations, date handling, soft deletes | Streaming cursors, date utilities |
 | `dms` | Document management | Hierarchical folders, versioning, FTS | N+1 queries, pagination, audit trails | **Eager loading**, **soft delete scopes**, **pagination builder**, **N+1 detection** |
+| `wms` | Warehouse/Inventory | Stock, reservations, movements | **Optimistic locking**, **atomic multi-table ops**, **upsert**, **concurrent access** | *(Phase 6 candidates)* |
 
 ### What Each Mock App Teaches
 
@@ -48,6 +49,8 @@ The `src/` directory contains mock applications that serve dual purposes:
 **Habit Tracker** - Time-series patterns. Daily habit tracking with streak calculations, completion rates, and trend analysis. Shows aggregation queries, date handling, and soft delete patterns.
 
 **DMS (Document Management System)** - Enterprise patterns. Hierarchical folders, document versioning, comments, tags (many-to-many), sharing permissions, FTS5 search, cursor-based pagination, and full audit trails. This mock exposed the most API friction and drove the most improvements.
+
+**WMS (Warehouse Management System)** - Concurrency patterns. Stock management with optimistic locking (version columns), reservation system with expiry, atomic stock transfers between locations, movement audit trails. This mock exposes friction around concurrent access and multi-table atomic operations - key areas for Phase 6 improvements.
 
 Each mock application has its own test suite. When we add API improvements based on mock app friction, we add tests for both the new API *and* verify the mock app benefits.
 
@@ -1390,8 +1393,10 @@ Comprehensive test suite using EiffelStudio AutoTest framework:
 - `TEST_HABIT_TRACKER` - Habit tracking with streaks, analytics (25 tests)
 - `TEST_DMS_APP` - Document management system (40 tests)
 - `TEST_DMS_STRESS` - DMS stress tests with N+1 detection, pagination, audit (24 tests)
+- `TEST_WMS_APP` - Warehouse management basic tests (17 tests)
+- `TEST_WMS_STRESS` - WMS stress tests with optimistic locking, bulk operations (8 tests)
 
-**Total: 460+ tests (100% passing)**
+**Total: 485+ tests (100% passing)**
 
 All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolated execution.
 
@@ -1508,7 +1513,31 @@ All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolate
 - `SIMPLE_SQL_IMPORT` - Import from CSV, JSON, SQL formats
 - Round-trip data integrity (export then import)
 
-### Phase 6: Enterprise Features (Future)
+### Phase 6: Concurrency & Atomic Operations (WMS-Driven)
+
+Friction points identified by the WMS mock application:
+
+**Optimistic Locking** (F1)
+- `update_versioned(table, id, version, changes)` - Update with version check
+- Automatic conflict detection (returns success/conflict)
+- Built-in retry support for transient conflicts
+
+**Atomic Operations** (F2)
+- `db.atomic(agent)` - Execute agent in transaction with automatic retry
+- Rollback on any failure, commit on success
+- Configurable retry count for optimistic lock conflicts
+
+**Upsert Pattern** (F4)
+- `db.upsert(table, data, conflict_columns)` - Insert or update in single operation
+- `db.upsert_batch(table, rows, conflict_columns)` - Bulk upsert
+- Leverages SQLite's `INSERT ... ON CONFLICT` syntax
+
+**Conditional Updates** (F3)
+- `db.decrement_if(table, column, amount, condition)` - Decrement only if condition met
+- `db.increment_if(table, column, amount, condition)` - Increment only if condition met
+- Atomic check-and-modify in single statement
+
+### Phase 7: Enterprise Features (Future)
 
 **Multi-Database Support**
 - Database abstraction layer
@@ -1587,7 +1616,8 @@ docs/
     ├── todo.html           -- Basic CRUD patterns
     ├── cpm.html            -- Parameterized queries
     ├── habit-tracker.html  -- Time-series data
-    └── dms.html            -- Enterprise patterns
+    ├── dms.html            -- Enterprise patterns
+    └── wms.html            -- Concurrency patterns
 ```
 
 ### EIS Integration
@@ -1615,12 +1645,12 @@ Contributions welcome! Please ensure:
 
 ## Status
 
-**Current Version:** 1.1
+**Current Version:** 1.2
 **Stability:** Production - Core API stable
-**Production Ready:** Phases 1-5 complete plus new DMS-driven improvements. All features production-ready: core CRUD, prepared statements, PRAGMA configuration, batch operations, fluent query builder, schema introspection, migrations, streaming, FTS5 full-text search, BLOB handling, JSON1 extension, audit tracking, repository pattern, vector embeddings, online backup, export/import, **eager loading**, **soft delete scopes**, **pagination builder**, and **N+1 detection**.
-**Test Coverage:** 460+ tests (100% passing) - includes edge case tests from code review + 4 comprehensive mock application test suites
+**Production Ready:** Phases 1-5 complete plus DMS-driven and WMS-driven improvements. All features production-ready: core CRUD, prepared statements, PRAGMA configuration, batch operations, fluent query builder, schema introspection, migrations, streaming, FTS5 full-text search, BLOB handling, JSON1 extension, audit tracking, repository pattern, vector embeddings, online backup, export/import, **eager loading**, **soft delete scopes**, **pagination builder**, and **N+1 detection**.
+**Test Coverage:** 485+ tests (100% passing) - includes edge case tests from code review + 5 comprehensive mock application test suites
 **SQLite Version:** 3.51.1 (via eiffel_sqlite_2025 v1.0.0)
-**Mock Apps:** 4 (TODO, CPM, Habit Tracker, DMS) - demonstrating real-world usage patterns
+**Mock Apps:** 5 (TODO, CPM, Habit Tracker, DMS, WMS) - demonstrating real-world usage patterns
 
 ---
 
