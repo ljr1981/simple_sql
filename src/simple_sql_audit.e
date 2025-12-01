@@ -57,13 +57,16 @@ feature -- Status
 			l_result: SIMPLE_SQL_RESULT
 		do
 			l_result := database.query (
-				"SELECT COUNT(*) as cnt FROM sqlite_master WHERE type='trigger' AND name LIKE '" + a_table + "_audit_%'"
+				"SELECT COUNT(*) as cnt FROM sqlite_master WHERE type='trigger' AND name LIKE '" + a_table + "_audit_%%'"
 			)
+			check query_succeeded: not database.has_error end
+			check result_not_empty: not l_result.is_empty end
 			if not l_result.is_empty then
 				l_count := l_result.first.integer_value ("cnt")
-				Result := l_count >= 3  -- Should have 3 triggers (INSERT, UPDATE, DELETE)
+				Result := l_count >= 3
 			end
 		end
+
 
 	has_audit_table (a_table: STRING_8): BOOLEAN
 			-- Does audit table exist for given table?
@@ -89,19 +92,14 @@ feature -- Configuration
 		require
 			table_not_empty: not a_table.is_empty
 			table_exists: database.schema.table_exists (a_table)
-		local
-			l_trigger_count: INTEGER
 		do
 			if not has_audit_table (a_table) then
 				create_audit_table (a_table)
-				-- Assertion: Audit table creation MUST succeed or postcondition cannot be satisfied
 				check audit_table_created: not database.has_error end
 			end
-			-- Diagnostic checks before creating triggers
-			check internal_db_not_closed: not database.internal_db.is_closed end
-			check internal_db_writable: database.internal_db.is_writable end
-			check internal_db_accessible: database.internal_db.is_accessible end
-			check interface_usable: database.internal_db.is_interface_usable end
+			if not is_enabled (a_table) then
+				create_triggers (a_table)
+			end
 		ensure
 			enabled: is_enabled (a_table)
 			has_table: has_audit_table (a_table)
@@ -142,7 +140,7 @@ feature -- Querying
 			l_stmt: SIMPLE_SQL_PREPARED_STATEMENT
 		do
 			l_stmt := database.prepare (
-				"SELECT * FROM " + audit_table_name (a_table) + " WHERE record_id = ? ORDER BY timestamp DESC"
+				"SELECT * FROM " + audit_table_name (a_table) + " WHERE record_id = ? ORDER BY audit_id DESC"
 			)
 			l_stmt.bind_integer (1, a_record_id)
 			Result := l_stmt.execute_returning_result
@@ -163,7 +161,7 @@ feature -- Querying
 		do
 			l_stmt := database.prepare (
 				"SELECT * FROM " + audit_table_name (a_table) +
-				" WHERE timestamp BETWEEN ? AND ? ORDER BY timestamp DESC"
+				" WHERE timestamp BETWEEN ? AND ? ORDER BY audit_id DESC"
 			)
 			l_stmt.bind_text (1, a_start)
 			l_stmt.bind_text (2, a_end)
@@ -182,7 +180,7 @@ feature -- Querying
 			l_stmt: SIMPLE_SQL_PREPARED_STATEMENT
 		do
 			l_stmt := database.prepare (
-				"SELECT * FROM " + audit_table_name (a_table) + " ORDER BY timestamp DESC LIMIT ?"
+				"SELECT * FROM " + audit_table_name (a_table) + " ORDER BY audit_id DESC LIMIT ?"
 			)
 			l_stmt.bind_integer (1, a_limit.to_integer_64)
 			Result := l_stmt.execute_returning_result
@@ -201,7 +199,7 @@ feature -- Querying
 			l_stmt: SIMPLE_SQL_PREPARED_STATEMENT
 		do
 			l_stmt := database.prepare (
-				"SELECT * FROM " + audit_table_name (a_table) + " WHERE operation = ? ORDER BY timestamp DESC"
+				"SELECT * FROM " + audit_table_name (a_table) + " WHERE operation = ? ORDER BY audit_id DESC"
 			)
 			l_stmt.bind_text (1, a_operation)
 			Result := l_stmt.execute_returning_result
