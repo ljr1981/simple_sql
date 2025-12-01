@@ -506,4 +506,252 @@ feature -- Test routines: SIMPLE_SQL_VECTOR_STORE Similarity Search
 			l_db.close
 		end
 
+feature -- Test routines: Priority 2 Edge Cases
+
+	test_vector_near_zero
+			-- Test vectors with small values that still have meaningful magnitude
+			-- Note: Values must be large enough that mag1*mag2 > Tolerance (1e-10)
+			-- With values ~1e-5, magnitude ~1e-5, product ~1e-10 which is borderline
+			-- Using 1e-4 gives comfortable margin
+		note
+			testing: "covers/{SIMPLE_SQL_VECTOR}.magnitude"
+			testing: "covers/{SIMPLE_SQL_SIMILARITY}.cosine_similarity"
+		local
+			l_sim: SIMPLE_SQL_SIMILARITY
+			l_vec1, l_vec2: SIMPLE_SQL_VECTOR
+			l_score: REAL_64
+		do
+			create l_sim.make
+			-- Small but computationally meaningful values
+			create l_vec1.make_from_array (<<1.0e-4, 2.0e-4, 3.0e-4>>)
+			create l_vec2.make_from_array (<<1.0e-4, 2.0e-4, 3.0e-4>>)
+
+			-- Should still compute similarity correctly
+			l_score := l_sim.cosine_similarity (l_vec1, l_vec2)
+			assert_true ("near_zero_identical", (l_score - 1.0).abs < 1.0e-6)
+
+			-- Magnitude should be calculable
+			assert_true ("has_magnitude", l_vec1.magnitude > 0.0)
+
+			-- Also test with slightly different small vectors
+			create l_vec2.make_from_array (<<1.0e-4, 2.0e-4, 3.1e-4>>)
+			l_score := l_sim.cosine_similarity (l_vec1, l_vec2)
+			assert_true ("near_zero_similar", l_score > 0.99)  -- Should be very similar
+		end
+
+	test_vector_zero_magnitude
+			-- Test zero vector similarity (division by zero handling)
+		note
+			testing: "covers/{SIMPLE_SQL_SIMILARITY}.cosine_similarity"
+		local
+			l_sim: SIMPLE_SQL_SIMILARITY
+			l_zero, l_nonzero: SIMPLE_SQL_VECTOR
+			l_score: REAL_64
+		do
+			create l_sim.make
+			create l_zero.make_zero (3)
+			create l_nonzero.make_from_array (<<1.0, 2.0, 3.0>>)
+
+			-- Zero vector vs itself - should handle gracefully (return 0 to avoid NaN)
+			l_score := l_sim.cosine_similarity (l_zero, l_zero)
+			assert_true ("zero_vs_zero_no_nan", not l_score.is_nan)
+
+			-- Zero vector vs non-zero - should handle gracefully
+			l_score := l_sim.cosine_similarity (l_zero, l_nonzero)
+			assert_true ("zero_vs_nonzero_no_nan", not l_score.is_nan)
+		end
+
+	test_vector_large_values
+			-- Test vectors with large values (near REAL_64 range)
+		note
+			testing: "covers/{SIMPLE_SQL_VECTOR}.magnitude"
+			testing: "covers/{SIMPLE_SQL_VECTOR}.to_blob"
+		local
+			l_vec1, l_vec2: SIMPLE_SQL_VECTOR
+			l_blob: MANAGED_POINTER
+			l_sim: SIMPLE_SQL_SIMILARITY
+			l_score: REAL_64
+		do
+			create l_sim.make
+			-- Large but manageable values (avoid overflow in dot product)
+			create l_vec1.make_from_array (<<1.0e100, 2.0e100>>)
+			create l_vec2.make_from_array (<<1.0e100, 2.0e100>>)
+
+			-- Should still compute similarity (both vectors same direction)
+			l_score := l_sim.cosine_similarity (l_vec1, l_vec2)
+			assert_true ("large_identical", (l_score - 1.0).abs < 1.0e-6)
+
+			-- BLOB roundtrip should preserve values
+			l_blob := l_vec1.to_blob
+			create l_vec2.make_from_blob (l_blob)
+			assert_true ("large_roundtrip", l_vec1.is_equal (l_vec2))
+		end
+
+	test_vector_negative_values
+			-- Test vectors with all negative components
+		note
+			testing: "covers/{SIMPLE_SQL_VECTOR}.magnitude"
+			testing: "covers/{SIMPLE_SQL_SIMILARITY}.cosine_similarity"
+		local
+			l_sim: SIMPLE_SQL_SIMILARITY
+			l_vec_neg, l_vec_pos: SIMPLE_SQL_VECTOR
+			l_score: REAL_64
+		do
+			create l_sim.make
+			create l_vec_neg.make_from_array (<<-1.0, -2.0, -3.0>>)
+			create l_vec_pos.make_from_array (<<1.0, 2.0, 3.0>>)
+
+			-- Negative vector has same magnitude as positive
+			assert_true ("same_magnitude", (l_vec_neg.magnitude - l_vec_pos.magnitude).abs < 1.0e-10)
+
+			-- Negative vs itself should be 1.0
+			l_score := l_sim.cosine_similarity (l_vec_neg, l_vec_neg)
+			assert_true ("neg_identical", (l_score - 1.0).abs < 1.0e-10)
+
+			-- Negative vs positive (opposite) should be -1.0
+			l_score := l_sim.cosine_similarity (l_vec_neg, l_vec_pos)
+			assert_true ("neg_vs_pos", (l_score - (-1.0)).abs < 1.0e-10)
+		end
+
+	test_similarity_identical_vectors_exact
+			-- Test cosine similarity = 1.0 exactly for various identical vectors
+		note
+			testing: "covers/{SIMPLE_SQL_SIMILARITY}.cosine_similarity"
+		local
+			l_sim: SIMPLE_SQL_SIMILARITY
+			l_vec: SIMPLE_SQL_VECTOR
+			l_score: REAL_64
+		do
+			create l_sim.make
+
+			-- Unit vector
+			create l_vec.make_from_array (<<1.0, 0.0, 0.0>>)
+			l_score := l_sim.cosine_similarity (l_vec, l_vec)
+			assert_true ("unit_identical", (l_score - 1.0).abs < 1.0e-10)
+
+			-- Non-unit vector
+			create l_vec.make_from_array (<<3.0, 4.0, 5.0>>)
+			l_score := l_sim.cosine_similarity (l_vec, l_vec)
+			assert_true ("nonunit_identical", (l_score - 1.0).abs < 1.0e-10)
+
+			-- Single dimension
+			create l_vec.make_from_array (<<42.0>>)
+			l_score := l_sim.cosine_similarity (l_vec, l_vec)
+			assert_true ("single_dim_identical", (l_score - 1.0).abs < 1.0e-10)
+		end
+
+	test_similarity_opposite_vectors_exact
+			-- Test cosine similarity = -1.0 exactly for opposite vectors
+		note
+			testing: "covers/{SIMPLE_SQL_SIMILARITY}.cosine_similarity"
+		local
+			l_sim: SIMPLE_SQL_SIMILARITY
+			l_vec1, l_vec2: SIMPLE_SQL_VECTOR
+			l_score: REAL_64
+		do
+			create l_sim.make
+
+			-- Simple opposite
+			create l_vec1.make_from_array (<<1.0, 0.0>>)
+			create l_vec2.make_from_array (<<-1.0, 0.0>>)
+			l_score := l_sim.cosine_similarity (l_vec1, l_vec2)
+			assert_true ("simple_opposite", (l_score - (-1.0)).abs < 1.0e-10)
+
+			-- Multi-dimensional opposite
+			create l_vec1.make_from_array (<<1.0, 2.0, 3.0, 4.0>>)
+			create l_vec2.make_from_array (<<-1.0, -2.0, -3.0, -4.0>>)
+			l_score := l_sim.cosine_similarity (l_vec1, l_vec2)
+			assert_true ("multi_opposite", (l_score - (-1.0)).abs < 1.0e-10)
+
+			-- Scaled opposite (different magnitudes, same direction opposite)
+			create l_vec1.make_from_array (<<2.0, 4.0>>)
+			create l_vec2.make_from_array (<<-1.0, -2.0>>)
+			l_score := l_sim.cosine_similarity (l_vec1, l_vec2)
+			assert_true ("scaled_opposite", (l_score - (-1.0)).abs < 1.0e-10)
+		end
+
+	test_knn_tie_breaking
+			-- Test multiple vectors at same distance
+		note
+			testing: "covers/{SIMPLE_SQL_VECTOR_STORE}.find_nearest"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_store: SIMPLE_SQL_VECTOR_STORE
+			l_query, l_vec: SIMPLE_SQL_VECTOR
+			l_results: ARRAYED_LIST [TUPLE [id: INTEGER_64; vector: SIMPLE_SQL_VECTOR; score: REAL_64]]
+			l_ignored_id: INTEGER_64
+		do
+			create l_db.make_memory
+			create l_store.make (l_db, "embeddings")
+
+			-- Insert multiple vectors with identical similarity to query
+			-- All unit vectors at same angle from query
+			create l_vec.make_from_array (<<0.707, 0.707>>)  -- 45 degrees
+			l_ignored_id := l_store.insert (l_vec, Void)
+
+			create l_vec.make_from_array (<<0.707, 0.707>>)  -- Same: 45 degrees
+			l_ignored_id := l_store.insert (l_vec, Void)
+
+			create l_vec.make_from_array (<<0.707, 0.707>>)  -- Same: 45 degrees
+			l_ignored_id := l_store.insert (l_vec, Void)
+
+			create l_vec.make_from_array (<<1.0, 0.0>>)  -- Different: 0 degrees (closer)
+			l_ignored_id := l_store.insert (l_vec, Void)
+
+			create l_query.make_from_array (<<1.0, 0.0>>)
+			l_results := l_store.find_nearest (l_query, 4)
+
+			-- Should return all 4, first one should be the identical vector (score ~1.0)
+			assert_equal ("four_results", 4, l_results.count)
+			assert_true ("first_is_best", (l_results [1].score - 1.0).abs < 1.0e-6)
+
+			-- The three 45-degree vectors should all have same score (~0.707)
+			assert_true ("tied_scores", (l_results [2].score - l_results [3].score).abs < 1.0e-6)
+			assert_true ("tied_scores_2", (l_results [3].score - l_results [4].score).abs < 1.0e-6)
+
+			l_db.close
+		end
+
+	test_vector_store_large_batch
+			-- Test inserting 1000+ vectors and query performance
+		note
+			testing: "covers/{SIMPLE_SQL_VECTOR_STORE}.insert"
+			testing: "covers/{SIMPLE_SQL_VECTOR_STORE}.find_nearest"
+		local
+			l_db: SIMPLE_SQL_DATABASE
+			l_store: SIMPLE_SQL_VECTOR_STORE
+			l_vec, l_query: SIMPLE_SQL_VECTOR
+			l_results: ARRAYED_LIST [TUPLE [id: INTEGER_64; vector: SIMPLE_SQL_VECTOR; score: REAL_64]]
+			l_ignored_id: INTEGER_64
+			i: INTEGER
+			l_x, l_y, l_angle: REAL_64
+			l_math: DOUBLE_MATH
+		do
+			create l_db.make_memory
+			create l_store.make (l_db, "embeddings")
+			create l_math
+
+			-- Insert 1000 vectors in a circle pattern
+			from i := 0 until i >= 1000 loop
+				l_angle := i * 0.00628  -- Spread around unit circle
+				l_x := l_math.cosine (l_angle)
+				l_y := l_math.sine (l_angle)
+				create l_vec.make_from_array (<<l_x, l_y>>)
+				l_ignored_id := l_store.insert (l_vec, Void)
+				i := i + 1
+			end
+
+			assert_true ("thousand_inserted", l_store.count = 1000)
+
+			-- Query should still work efficiently
+			create l_query.make_from_array (<<1.0, 0.0>>)  -- East
+			l_results := l_store.find_nearest (l_query, 10)
+
+			assert_equal ("ten_results", 10, l_results.count)
+			-- First result should be very similar (near 1.0)
+			assert_true ("best_match_good", l_results [1].score > 0.99)
+
+			l_db.close
+		end
+
 end

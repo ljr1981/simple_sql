@@ -97,7 +97,7 @@ A production-quality, easy-to-use wrapper around the Eiffel SQLite3 library, pro
 - **Repository Pattern** with generic CRUD operations, find_all, find_by_id, find_where, pagination
 - **Vector Embeddings** for ML/AI with similarity search, K-nearest neighbors, cosine/Euclidean distance
 - **Online Backup API** with progress callbacks, incremental backup, export/import (CSV, JSON, SQL) (NEW)
-- Comprehensive test suite with 288 tests (100% passing)
+- Comprehensive test suite with 304 tests (100% passing)
 
 **Design Principles:**
 - Command-Query Separation throughout
@@ -1116,11 +1116,11 @@ Comprehensive test suite using EiffelStudio AutoTest framework:
 - `TEST_SIMPLE_SQL_REPOSITORY` - Repository pattern (23 tests)
 - `TEST_SIMPLE_SQL_SCHEMA` - Schema introspection (11 tests)
 - `TEST_SIMPLE_SQL_STREAMING` - Result streaming (19 tests)
-- `TEST_SIMPLE_SQL_VECTOR` - Vector embeddings (22 tests)
-- `TEST_SIMPLE_SQL_ADVANCED_BACKUP` - Online backup, export/import, BLOB round-trip (16 tests) ✅ NEW
+- `TEST_SIMPLE_SQL_VECTOR` - Vector embeddings (30 tests) ✅ +8 edge case tests
+- `TEST_SIMPLE_SQL_ADVANCED_BACKUP` - Online backup, export/import, edge cases (24 tests) ✅ +8 edge case tests
 - `TEST_BLOB_DEBUG` - Debug utilities (1 test)
 
-**Total: 288 tests (100% passing)**
+**Total: 304 tests (100% passing)**
 
 All tests include proper setup/teardown with `on_prepare`/`on_clean` for isolated execution.
 
@@ -1307,7 +1307,7 @@ Contributions welcome! Please ensure:
 **Current Version:** 1.0
 **Stability:** Production - Core API stable
 **Production Ready:** Phases 1-5 complete. All features production-ready: core CRUD, prepared statements, PRAGMA configuration, batch operations, fluent query builder, schema introspection, migrations, streaming, FTS5 full-text search, BLOB handling, JSON1 extension, audit tracking, repository pattern, vector embeddings, online backup, and export/import.
-**Test Coverage:** 288 tests (100% passing)
+**Test Coverage:** 304 tests (100% passing) - includes edge case tests from Grok code review
 **SQLite Version:** 3.51.1 (via eiffel_sqlite_2025 v1.0.0)
 
 ---
