@@ -656,6 +656,8 @@ feature -- Atomic Operations (Phase 6)
 				end
 				l_sql.append_string_general (a_columns [i])
 				i := i + 1
+			variant
+				a_columns.upper - i + 1
 			end
 
 			l_sql.append (") VALUES (")
@@ -667,6 +669,8 @@ feature -- Atomic Operations (Phase 6)
 				end
 				l_sql.append ("?")
 				i := i + 1
+			variant
+				a_values.upper - i + 1
 			end
 
 			l_sql.append (") ON CONFLICT (")
@@ -678,6 +682,8 @@ feature -- Atomic Operations (Phase 6)
 				end
 				l_sql.append_string_general (a_conflict_columns [i])
 				i := i + 1
+			variant
+				a_conflict_columns.upper - i + 1
 			end
 
 			l_sql.append (") DO UPDATE SET ")
@@ -698,6 +704,8 @@ feature -- Atomic Operations (Phase 6)
 				l_sql.append (" = excluded.")
 				l_sql.append (l_update_cols [i])
 				i := i + 1
+			variant
+				l_update_cols.count - i + 1
 			end
 
 			execute_with_args (l_sql, a_values)
@@ -847,12 +855,15 @@ feature {NONE} -- Implementation
 					a_stmt.bind_null (i - a_args.lower + 1)
 				end
 				i := i + 1
+			variant
+				a_args.upper - i + 1
 			end
 		end
 
 invariant
 	internal_db_attached: internal_db /= Void
 	file_name_attached: file_name /= Void
+	error_consistency: has_error = (last_structured_error /= Void)
 
 note
 	copyright: "Copyright (c) 2025, Larry Rix"

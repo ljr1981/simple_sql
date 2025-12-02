@@ -59,6 +59,8 @@ feature {SIMPLE_SQL_QUERY_BUILDER} -- Implementation
 					Result.append_character (c.to_character_8)
 				end
 				i := i + 1
+			variant
+				a_string.count - i + 1
 			end
 			Result.append_character ('%'')
 		ensure
@@ -144,6 +146,8 @@ feature {SIMPLE_SQL_QUERY_BUILDER} -- Implementation
 							Result := True
 						end
 						i := i + 1
+					variant
+						a_name.count - i + 1
 					end
 				end
 				-- Check for reserved words (basic set)

@@ -306,7 +306,11 @@ feature {NONE} -- Implementation
 					Result := Result + 1
 				end
 				i := i + 1
+			variant
+				sql.count - i + 1
 			end
+		ensure
+			non_negative: Result >= 0
 		end
 
 	parameter_index (a_name: STRING_8): INTEGER
@@ -342,7 +346,11 @@ feature {NONE} -- Implementation
 					Result := Result + 1
 				end
 				i := i + 1
+			variant
+				a_position - i
 			end
+		ensure
+			non_negative: Result >= 0
 		end
 
 	sql_with_bound_values: STRING_8
@@ -379,6 +387,8 @@ feature {NONE} -- Implementation
 					from j := i + 1 until j > sql.count or not is_identifier_char (sql.item (j)) loop
 						l_param_name.append_character (sql.item (j))
 						j := j + 1
+					variant
+						sql.count - j + 1
 					end
 					-- Look up and substitute
 					l_param_index := parameter_index (l_param_name)
@@ -392,6 +402,8 @@ feature {NONE} -- Implementation
 					l_result.append_character (c)
 				end
 				i := i + 1
+			variant
+				sql.count - i + 1
 			end
 			Result := l_result
 		end
@@ -440,6 +452,8 @@ feature {NONE} -- Implementation
 				l_byte := a_blob.read_natural_8 (i)
 				Result.append (byte_to_hex (l_byte))
 				i := i + 1
+			variant
+				a_blob.count - i
 			end
 			Result.append_character ('%'')
 		ensure
@@ -497,8 +511,13 @@ feature {NONE} -- Implementation
 					Result.append_character (c.to_character_8)
 				end
 				i := i + 1
+			variant
+				a_string.count - i + 1
 			end
 			Result.append_character ('%'')
+		ensure
+			starts_with_quote: Result.item (1) = '%''
+			ends_with_quote: Result.item (Result.count) = '%''
 		end
 
 	execute_query (a_sql: STRING_8)

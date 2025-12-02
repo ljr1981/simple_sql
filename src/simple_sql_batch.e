@@ -152,6 +152,8 @@ feature -- Batch operations
 				end
 				l_sql.append (a_columns [i])
 				i := i + 1
+			variant
+				a_columns.upper - i + 1
 			end
 			l_sql.append (") VALUES (")
 			from i := a_values.lower until i > a_values.upper loop
@@ -160,6 +162,8 @@ feature -- Batch operations
 				end
 				l_sql.append (value_to_sql (a_values [i]))
 				i := i + 1
+			variant
+				a_values.upper - i + 1
 			end
 			l_sql.append (")")
 			add (l_sql)
@@ -191,6 +195,8 @@ feature -- Batch operations
 				l_sql.append (" = ")
 				l_sql.append (value_to_sql (a_set_values [i]))
 				i := i + 1
+			variant
+				a_set_columns.upper - i + 1
 			end
 			l_sql.append (" WHERE ")
 			l_sql.append (a_where)
@@ -242,6 +248,8 @@ feature -- Convenience operations
 				l_sql := substitute_placeholders (a_sql_template, a_value_sets [i])
 				add (l_sql)
 				i := i + 1
+			variant
+				a_value_sets.upper - i + 1
 			end
 
 			if not l_was_active then
@@ -268,6 +276,8 @@ feature -- Convenience operations
 			from i := a_value_sets.lower until i > a_value_sets.upper or has_error loop
 				insert (a_table, a_columns, a_value_sets [i])
 				i := i + 1
+			variant
+				a_value_sets.upper - i + 1
 			end
 
 			if not l_was_active then
@@ -339,8 +349,13 @@ feature {NONE} -- Implementation
 					Result.append_character (c.to_character_8)
 				end
 				i := i + 1
+			variant
+				a_string.count - i + 1
 			end
 			Result.append_character ('%'')
+		ensure
+			starts_with_quote: Result.item (1) = '%''
+			ends_with_quote: Result.item (Result.count) = '%''
 		end
 
 	substitute_placeholders (a_template: READABLE_STRING_8; a_values: ARRAY [detachable ANY]): STRING_8
@@ -368,7 +383,11 @@ feature {NONE} -- Implementation
 					Result.append_character (c)
 				end
 				i := i + 1
+			variant
+				a_template.count - i + 1
 			end
+		ensure
+			result_not_void: Result /= Void
 		end
 
 feature {NONE} -- Constants

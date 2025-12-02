@@ -62,6 +62,8 @@ feature -- Status report
 					Result := True
 				end
 				i := i + 1
+			variant
+				columns.count - i + 1
 			end
 		end
 
@@ -83,6 +85,8 @@ feature -- Access
 					Result := values.i_th (i)
 				end
 				i := i + 1
+			variant
+				columns.count - i + 1
 			end
 		end
 
