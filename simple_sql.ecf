@@ -13,7 +13,7 @@
 		<setting name="dead_code_removal" value="feature"/>
 		<library name="base" location="$ISE_LIBRARY\library\base\base.ecf"/>
 		<library name="base_extension" location="$ISE_LIBRARY\library\base_extension\base_extension.ecf"/>
-		<library name="simple_json" location="D:\prod\simple_json\simple_json.ecf"/>
+		<library name="simple_json" location="$SIMPLE_JSON\simple_json.ecf"/>
 		<library name="sqlite" location="D:\prod\eiffel_sqlite_2025\sqlite_2025.ecf"/>
 		<cluster name="src" location=".\src\" recursive="true">
 			<file_rule>
@@ -32,7 +32,7 @@
 		</option>
 		<setting name="console_application" value="true"/>
 		<library name="testing" location="$ISE_LIBRARY\library\testing\testing.ecf"/>
-		<library name="testing_ext" location="D:\prod\testing_ext\testing_ext.ecf"/>
+		<library name="testing_ext" location="$TESTING_EXT\testing_ext.ecf"/>
 		<cluster name="test" location=".\testing\" recursive="true">
 			<file_rule>
 				<exclude>/cpm_app$</exclude>
@@ -54,7 +54,7 @@
 	<target name="todo_app_tests" extends="todo_app">
 		<root class="APPLICATION" feature="make"/>
 		<library name="testing" location="$ISE_LIBRARY\library\testing\testing.ecf"/>
-		<library name="testing_ext" location="D:\prod\testing_ext\testing_ext.ecf"/>
+		<library name="testing_ext" location="$TESTING_EXT\testing_ext.ecf"/>
 		<cluster name="todo_app_test" location=".\testing\todo_app\" recursive="true"/>
 	</target>
 	<target name="cpm_app" extends="simple_sql">
@@ -68,7 +68,7 @@
 	<target name="cpm_app_tests" extends="cpm_app">
 		<root class="APPLICATION" feature="make"/>
 		<library name="testing" location="$ISE_LIBRARY\library\testing\testing.ecf"/>
-		<library name="testing_ext" location="D:\prod\testing_ext\testing_ext.ecf"/>
+		<library name="testing_ext" location="$TESTING_EXT\testing_ext.ecf"/>
 		<cluster name="cpm_app_test" location=".\testing\cpm_app\" recursive="true"/>
 	</target>
 	<target name="habit_tracker" extends="simple_sql">
@@ -82,7 +82,7 @@
 	<target name="habit_tracker_tests" extends="habit_tracker">
 		<root class="APPLICATION" feature="make"/>
 		<library name="testing" location="$ISE_LIBRARY\library\testing\testing.ecf"/>
-		<library name="testing_ext" location="D:\prod\testing_ext\testing_ext.ecf"/>
+		<library name="testing_ext" location="$TESTING_EXT\testing_ext.ecf"/>
 		<cluster name="habit_tracker_test" location=".\testing\habit_tracker\" recursive="true"/>
 	</target>
 	<target name="dms" extends="simple_sql">
@@ -96,7 +96,7 @@
 	<target name="dms_tests" extends="dms">
 		<root class="APPLICATION" feature="make"/>
 		<library name="testing" location="$ISE_LIBRARY\library\testing\testing.ecf"/>
-		<library name="testing_ext" location="D:\prod\testing_ext\testing_ext.ecf"/>
+		<library name="testing_ext" location="$TESTING_EXT\testing_ext.ecf"/>
 		<cluster name="dms_test" location=".\testing\dms\" recursive="true"/>
 	</target>
 	<target name="wms" extends="simple_sql">
@@ -117,7 +117,7 @@
 			<assertions precondition="true" postcondition="true" check="true" invariant="true" loop="true" supplier_precondition="true"/>
 		</option>
 		<library name="testing" location="$ISE_LIBRARY\library\testing\testing.ecf"/>
-		<library name="testing_ext" location="D:\prod\testing_ext\testing_ext.ecf"/>
+		<library name="testing_ext" location="$TESTING_EXT\testing_ext.ecf"/>
 		<cluster name="wms_test" location=".\testing\wms\" recursive="true"/>
 	</target>
 	<target name="wms_profile" extends="wms">
